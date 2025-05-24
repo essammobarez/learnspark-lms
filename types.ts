@@ -64,6 +64,8 @@ export interface GeneratedQuizQuestion {
 // Types for QuizWith session simulation
 export interface ActiveQuizWithSession {
   pin: string;
+  // Fix: Added missing sessionId property to align with its usage in mockApiService.ts.
+  sessionId: string; 
   quizId: string;
   courseId: string;
   hostUserId: string;
