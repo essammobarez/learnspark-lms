@@ -6,7 +6,6 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs'); // Using bcryptjs for easier installation
 const util = require('util');
-const { v4: uuidv4 } = require('uuid'); // For generating VARCHAR IDs
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -27,7 +26,8 @@ const connection = mysql.createConnection({
 connection.connect((err) => {
   if (err) {
     console.error('Error connecting to database:', err);
-    process.exit(1); 
+    // For a production app, you might want to exit or implement a retry mechanism
+    process.exit(1); // Exit if DB connection fails at start
   }
   console.log('Connected to MySQL database!');
 });
@@ -38,17 +38,17 @@ const query = util.promisify(connection.query).bind(connection);
 // --- Authentication Middleware ---
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; 
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
-  if (token == null) return res.sendStatus(401); 
+  if (token == null) return res.sendStatus(401); // if there isn't any token
 
   jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, userPayload) => {
     if (err) {
       console.error("JWT Verification Error:", err.message);
-      return res.status(403).json({ message: "Token is not valid or expired." }); 
+      return res.status(403).json({ message: "Token is not valid or expired." }); // if token is no longer valid
     }
-    req.user = userPayload; 
-    next(); 
+    req.user = userPayload; // Add user payload (e.g., { userId, role }) to request object
+    next(); // pass the execution off to whatever request the client intended
   });
 };
 
@@ -71,28 +71,28 @@ const authorizeRole = (allowedRoles) => {
 // === User Management ===
 app.post('/api/auth/signup', async (req, res) => {
   const { username, email, password, role } = req.body;
+  // Basic validation
   if (!username || !email || !password || !role) {
     return res.status(400).json({ message: 'All fields (username, email, password, role) are required.' });
   }
-  if (!['student', 'instructor'].includes(role)) { 
+  if (!['student', 'instructor'].includes(role)) { // Assuming admin role is not self-signup
     return res.status(400).json({ message: 'Invalid role specified.' });
   }
 
   try {
     const existingUser = await query('SELECT id FROM users WHERE email = ?', [email]);
     if (existingUser.length > 0) {
-      return res.status(409).json({ message: 'Email already in use.' }); 
+      return res.status(409).json({ message: 'Email already in use.' }); // 409 Conflict
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10); 
-    const newUserId = uuidv4(); // Generate VARCHAR ID
-    await query('INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
-      [newUserId, username, email, hashedPassword, role]);
+    const hashedPassword = await bcrypt.hash(password, 10); // Salt rounds = 10
+    const result = await query('INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, ?)', 
+      [username, email, hashedPassword, role]);
     
     res.status(201).json({ 
       success: true, 
       message: 'User created successfully.', 
-      user: { id: newUserId, username, email, role } 
+      user: { id: result.insertId, username, email, role } 
     });
   } catch (error) {
     console.error('Signup error:', error);
@@ -118,8 +118,9 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const userPayload = { userId: user.id, role: user.role, username: user.username };
-    const accessToken = jwt.sign(userPayload, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' }); 
-    
+    const accessToken = jwt.sign(userPayload, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' }); // Example: token expires in 1 hour
+    // TODO: Implement refresh tokens for a more robust auth system
+
     res.json({ 
       token: accessToken, 
       user: { id: user.id, username: user.username, email: user.email, role: user.role } 
@@ -131,9 +132,9 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
-  const userIdFromToken = req.user.userId;
+  const userId = req.user.userId;
   try {
-    const users = await query('SELECT id, username, email, role FROM users WHERE id = ?', [userIdFromToken]);
+    const users = await query('SELECT id, username, email, role FROM users WHERE id = ?', [userId]);
     if (users.length === 0) {
       return res.status(404).json({ message: 'User not found.' });
     }
@@ -146,19 +147,22 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 app.put('/api/users/:userId', authenticateToken, async (req, res) => {
   const { userId: paramUserId } = req.params;
-  const updates = req.body; 
+  const updates = req.body; // e.g., { username, email } - handle password updates separately with care
   const loggedInUserId = req.user.userId;
   const loggedInUserRole = req.user.role;
 
-  if (loggedInUserId !== paramUserId && loggedInUserRole !== 'admin') {
+  // Authorization: User can update their own profile, or an admin can update any.
+  if (loggedInUserId !== parseInt(paramUserId) && loggedInUserRole !== 'admin') {
       return res.status(403).json({ message: 'Forbidden: You can only update your own profile.' });
   }
 
+  // Basic validation (expand as needed)
   if (updates.email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(updates.email)) {
       return res.status(400).json({ message: 'Invalid email format.' });
     }
+     // Check if new email is already taken by another user
     const existingUser = await query('SELECT id FROM users WHERE email = ? AND id != ?', [updates.email, paramUserId]);
     if (existingUser.length > 0) {
         return res.status(409).json({ message: 'Email already in use by another account.' });
@@ -168,8 +172,10 @@ app.put('/api/users/:userId', authenticateToken, async (req, res) => {
     return res.status(400).json({ message: 'Username cannot be empty.'});
   }
 
+
   try {
-    const allowedUpdates = ['username', 'email']; 
+    // Construct SET clause dynamically based on provided updates
+    const allowedUpdates = ['username', 'email']; // Add other updatable fields
     const setClauses = [];
     const values = [];
     for (const key of allowedUpdates) {
@@ -181,8 +187,7 @@ app.put('/api/users/:userId', authenticateToken, async (req, res) => {
     if (setClauses.length === 0) {
         return res.status(400).json({ message: 'No valid fields provided for update.' });
     }
-    setClauses.push('updated_at = NOW()'); // Also update updated_at
-    values.push(paramUserId); 
+    values.push(paramUserId); // For WHERE id = ?
 
     const sql = `UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`;
     const result = await query(sql, values);
@@ -191,8 +196,8 @@ app.put('/api/users/:userId', authenticateToken, async (req, res) => {
         return res.status(404).json({ message: 'User not found or no changes made.' });
     }
     
-    const updatedUserResult = await query('SELECT id, username, email, role FROM users WHERE id = ?', [paramUserId]);
-    res.json({ message: 'User profile updated successfully.', user: updatedUserResult[0] });
+    const updatedUser = await query('SELECT id, username, email, role FROM users WHERE id = ?', [paramUserId]);
+    res.json({ message: 'User profile updated successfully.', user: updatedUser[0] });
   } catch (error) {
     console.error('Update user error:', error);
     res.status(500).json({ message: 'Error updating user profile.' });
@@ -202,40 +207,43 @@ app.put('/api/users/:userId', authenticateToken, async (req, res) => {
 
 // === Course Management ===
 app.post('/api/courses', authenticateToken, authorizeRole(['instructor']), async (req, res) => {
-  const instructorIdFromToken = req.user.userId;
+  const instructorId = req.user.userId;
+  const instructorName = req.user.username; // Assuming username is in token payload
   const { title, description, imageUrl, lessons = [], category } = req.body;
 
   if (!title || !description || !category) {
     return res.status(400).json({ message: 'Title, description, and category are required.'});
   }
-  const newCourseId = uuidv4();
 
+  // Use a transaction to ensure atomicity for course and lessons creation
   connection.beginTransaction(async (err) => {
     if (err) { 
         console.error('Transaction Begin Error:', err);
         return res.status(500).json({ message: 'Error starting transaction for course creation.' });
     }
     try {
-      await query(
-        'INSERT INTO courses (id, title, description, instructor_id, image_url, category, rating, enrollment_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, 0, NOW(), NOW())',
-        [newCourseId, title, description, instructorIdFromToken, imageUrl || null, category]
+      const courseResult = await query(
+        'INSERT INTO courses (title, description, instructorId, instructorName, imageUrl, category, rating, enrollmentCount) VALUES (?, ?, ?, ?, ?, 0, 0)',
+        [title, description, instructorId, instructorName, imageUrl || null, category]
       );
+      const courseId = courseResult.insertId;
 
       if (lessons && lessons.length > 0) {
         for (const lesson of lessons) {
           if (!lesson.title || !lesson.type || !lesson.content) {
+            // Rollback if a lesson is invalid
             await query('ROLLBACK');
-            return res.status(400).json({ message: `Invalid lesson data for lesson titled "${lesson.title || 'Untitled'}". Title, type, and content are required.`});
+            return res.status(400).json({ message: `Invalid lesson data provided for lesson titled "${lesson.title || 'Untitled'}". Title, type, and content are required.`});
           }
-          const newLessonId = uuidv4();
-          await query('INSERT INTO lessons (id, course_id, title, type, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())', 
-            [newLessonId, newCourseId, lesson.title, lesson.type, lesson.content]);
+          await query('INSERT INTO lessons (courseId, title, type, content) VALUES (?, ?, ?, ?)', 
+            [courseId, lesson.title, lesson.type, lesson.content]);
         }
       }
       await query('COMMIT');
-      const createdCourseResult = await query('SELECT c.*, u.username as instructorName FROM courses c JOIN users u ON c.instructor_id = u.id WHERE c.id = ?', [newCourseId]);
-      const createdLessons = await query('SELECT * FROM lessons WHERE course_id = ? ORDER BY lesson_order, id', [newCourseId]);
-      res.status(201).json({...createdCourseResult[0], lessons: createdLessons, quizIds: [] });
+      const createdCourse = await query('SELECT * FROM courses WHERE id = ?', [courseId]);
+      // Fetch lessons separately if needed for the response
+      const createdLessons = await query('SELECT * FROM lessons WHERE courseId = ?', [courseId]);
+      res.status(201).json({...createdCourse[0], lessons: createdLessons, quizIds: [] });
     } catch (error) {
       await query('ROLLBACK');
       console.error('Create course error (transaction rolled back):', error);
@@ -246,14 +254,10 @@ app.post('/api/courses', authenticateToken, authorizeRole(['instructor']), async
 
 app.get('/api/courses', async (req, res) => {
   try {
-    // Join with users table to get instructorName
-    const coursesData = await query(
-        `SELECT c.*, u.username as instructorName 
-         FROM courses c 
-         JOIN users u ON c.instructor_id = u.id 
-         ORDER BY c.created_at DESC`
-    );
-    res.json(coursesData.map(course => ({...course, lessons: [], quizIds: []}))); 
+    const courses = await query('SELECT * FROM courses ORDER BY createdAt DESC');
+    // For a full list, you might not fetch all lessons/quizzes to avoid N+1 queries or large responses.
+    // The client can fetch details on demand. Here, we'll return basic course info.
+    res.json(courses.map(course => ({...course, lessons: [], quizIds: []}))); // Keep structure consistent
   } catch (error) {
     console.error('Get courses error:', error);
     res.status(500).json({ message: 'Error fetching courses.' });
@@ -263,21 +267,18 @@ app.get('/api/courses', async (req, res) => {
 app.get('/api/courses/:courseId', async (req, res) => {
   const { courseId } = req.params;
   try {
-    const courseResults = await query(
-        `SELECT c.*, u.username as instructorName 
-         FROM courses c
-         JOIN users u ON c.instructor_id = u.id
-         WHERE c.id = ?`, [courseId]
-    );
+    const courseResults = await query('SELECT * FROM courses WHERE id = ?', [courseId]);
     if (courseResults.length === 0) {
       return res.status(404).json({ message: 'Course not found.' });
     }
     const course = courseResults[0];
-    const lessonsData = await query('SELECT * FROM lessons WHERE course_id = ? ORDER BY lesson_order, id', [courseId]);
-    const quizResults = await query('SELECT id, title FROM quizzes WHERE course_id = ? ORDER BY created_at', [courseId]);
+    const lessons = await query('SELECT * FROM lessons WHERE courseId = ? ORDER BY orderIndex, id', [courseId]);
+    const quizResults = await query('SELECT id, title FROM quizzes WHERE courseId = ? ORDER BY createdAt', [courseId]);
     
-    course.lessons = lessonsData;
-    course.quizIds = quizResults.map(q => q.id); 
+    course.lessons = lessons;
+    course.quizIds = quizResults.map(q => q.id); // Store just IDs, or full quiz titles if preferred
+    // To include full quiz objects (careful with response size):
+    // course.quizzes = quizResults; 
 
     res.json(course);
   } catch (error) {
@@ -301,35 +302,36 @@ app.put('/api/courses/:courseId', authenticateToken, authorizeRole(['instructor'
         return res.status(500).json({ message: 'Error starting transaction for course update.' });
     }
     try {
-      const courseCheck = await query('SELECT instructor_id FROM courses WHERE id = ?', [courseId]);
+      const courseCheck = await query('SELECT instructorId FROM courses WHERE id = ?', [courseId]);
       if (courseCheck.length === 0) {
         await query('ROLLBACK');
         return res.status(404).json({ message: 'Course not found.' });
       }
-      if (courseCheck[0].instructor_id !== instructorIdFromToken) {
+      if (courseCheck[0].instructorId !== instructorIdFromToken) {
         await query('ROLLBACK');
         return res.status(403).json({ message: 'Forbidden: You do not own this course.' });
       }
 
-      await query('UPDATE courses SET title = ?, description = ?, image_url = ?, category = ?, updated_at = NOW() WHERE id = ?',
+      await query('UPDATE courses SET title = ?, description = ?, imageUrl = ?, category = ? WHERE id = ?',
         [title, description, imageUrl || null, category, courseId]);
       
-      await query('DELETE FROM lessons WHERE course_id = ?', [courseId]);
+      // Handle lessons update: simple approach - delete existing and insert new ones.
+      // More complex scenarios might involve diffing, updating existing, etc.
+      await query('DELETE FROM lessons WHERE courseId = ?', [courseId]);
       if (lessons && lessons.length > 0) {
         for (const lesson of lessons) {
           if (!lesson.title || !lesson.type || !lesson.content) {
             await query('ROLLBACK');
             return res.status(400).json({ message: `Invalid lesson data for lesson: "${lesson.title || 'Untitled'}".` });
           }
-          const newLessonId = uuidv4(); // Generate ID for new lessons
-          await query('INSERT INTO lessons (id, course_id, title, type, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
-            [newLessonId, courseId, lesson.title, lesson.type, lesson.content]);
+          await query('INSERT INTO lessons (courseId, title, type, content) VALUES (?, ?, ?, ?)',
+            [courseId, lesson.title, lesson.type, lesson.content]);
         }
       }
       await query('COMMIT');
-      const updatedCourseResult = await query('SELECT c.*, u.username as instructorName FROM courses c JOIN users u ON c.instructor_id = u.id WHERE c.id = ?', [courseId]);
-      const updatedLessons = await query('SELECT * FROM lessons WHERE course_id = ? ORDER BY lesson_order, id', [courseId]);
-      res.json({...updatedCourseResult[0], lessons: updatedLessons});
+      const updatedCourse = await query('SELECT * FROM courses WHERE id = ?', [courseId]);
+      const updatedLessons = await query('SELECT * FROM lessons WHERE courseId = ?', [courseId]);
+      res.json({...updatedCourse[0], lessons: updatedLessons});
     } catch (error) {
       await query('ROLLBACK');
       console.error('Update course error (transaction rolled back):', error);
@@ -345,39 +347,40 @@ app.delete('/api/courses/:courseId', authenticateToken, authorizeRole(['instruct
   connection.beginTransaction(async (err) => {
     if (err) { return res.status(500).json({ message: 'Error starting transaction for course deletion.' }); }
     try {
-      const courseCheck = await query('SELECT instructor_id FROM courses WHERE id = ?', [courseId]);
+      const courseCheck = await query('SELECT instructorId FROM courses WHERE id = ?', [courseId]);
       if (courseCheck.length === 0) {
         await query('ROLLBACK');
         return res.status(404).json({ message: 'Course not found.' });
       }
-      if (courseCheck[0].instructor_id !== instructorIdFromToken) {
+      if (courseCheck[0].instructorId !== instructorIdFromToken) {
         await query('ROLLBACK');
         return res.status(403).json({ message: 'Forbidden: You do not own this course.' });
       }
       
-      const quizIdsResult = await query('SELECT id FROM quizzes WHERE course_id = ?', [courseId]);
+      // Assuming cascading deletes are set up in DB for quiz_options from quiz_questions, etc.
+      // Or delete them explicitly:
+      const quizIdsResult = await query('SELECT id FROM quizzes WHERE courseId = ?', [courseId]);
       for (const row of quizIdsResult) {
-        const questionIdsResult = await query('SELECT id FROM quiz_questions WHERE quiz_id = ?', [row.id]);
+        const questionIdsResult = await query('SELECT id FROM quiz_questions WHERE quizId = ?', [row.id]);
         for (const qRow of questionIdsResult) {
-            await query('DELETE FROM quiz_question_options WHERE question_id = ?', [qRow.id]);
+            await query('DELETE FROM quiz_options WHERE questionId = ?', [qRow.id]);
         }
-        await query('DELETE FROM quiz_questions WHERE quiz_id = ?', [row.id]);
+        await query('DELETE FROM quiz_questions WHERE quizId = ?', [row.id]);
       }
-      await query('DELETE FROM quizzes WHERE course_id = ?', [courseId]);
-      await query('DELETE FROM lessons WHERE course_id = ?', [courseId]);
-      await query('DELETE FROM user_enrolled_courses WHERE course_id = ?', [courseId]);
-      await query('DELETE FROM quiz_attempts WHERE course_id = ?', [courseId]); 
-      // Assuming active_quiz_with_sessions has course_id
-      await query('DELETE FROM active_quiz_with_sessions WHERE course_id = ?', [courseId]);
-
+      await query('DELETE FROM quizzes WHERE courseId = ?', [courseId]);
+      await query('DELETE FROM lessons WHERE courseId = ?', [courseId]);
+      await query('DELETE FROM enrollments WHERE courseId = ?', [courseId]);
+      await query('DELETE FROM quiz_attempts WHERE courseId = ?', [courseId]); 
+      // Add deletion from quizwith_sessions if a course deletion should also delete its games
+      
       const deleteResult = await query('DELETE FROM courses WHERE id = ?', [courseId]);
       if (deleteResult.affectedRows === 0) {
-        await query('ROLLBACK'); 
+        await query('ROLLBACK'); // Should not happen if previous checks passed
         return res.status(404).json({ message: 'Course not found during deletion.' });
       }
       
       await query('COMMIT');
-      res.status(204).send(); 
+      res.status(204).send(); // No content
     } catch (error) {
       await query('ROLLBACK');
       console.error('Delete course error:', error);
@@ -389,23 +392,22 @@ app.delete('/api/courses/:courseId', authenticateToken, authorizeRole(['instruct
 app.post('/api/courses/:courseId/lessons', authenticateToken, authorizeRole(['instructor']), async (req, res) => {
   const { courseId } = req.params;
   const instructorIdFromToken = req.user.userId;
-  const { title, type, content, lesson_order } = req.body; // Added lesson_order
+  const { title, type, content } = req.body;
 
   if (!title || !type || !content) {
     return res.status(400).json({ message: 'Lesson title, type, and content are required.' });
   }
   try {
-    const courseCheck = await query('SELECT instructor_id FROM courses WHERE id = ?', [courseId]);
+    const courseCheck = await query('SELECT instructorId FROM courses WHERE id = ?', [courseId]);
     if (courseCheck.length === 0) {
       return res.status(404).json({ message: 'Course not found.' });
     }
-    if (courseCheck[0].instructor_id !== instructorIdFromToken) {
+    if (courseCheck[0].instructorId !== instructorIdFromToken) {
       return res.status(403).json({ message: 'Forbidden: You do not own this course.' });
     }
-    const newLessonId = uuidv4();
-    await query('INSERT INTO lessons (id, course_id, title, type, content, lesson_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())',
-      [newLessonId, courseId, title, type, content, lesson_order || null]);
-    res.status(201).json({ id: newLessonId, course_id: courseId, title, type, content, lesson_order: lesson_order || null });
+    const result = await query('INSERT INTO lessons (courseId, title, type, content) VALUES (?, ?, ?, ?)',
+      [courseId, title, type, content]);
+    res.status(201).json({ id: result.insertId, courseId, title, type, content });
   } catch (error) {
     console.error('Add lesson error:', error);
     res.status(500).json({ message: 'Error adding lesson.' });
@@ -416,23 +418,22 @@ app.post('/api/courses/:courseId/lessons', authenticateToken, authorizeRole(['in
 // === Enrollment ===
 app.post('/api/courses/:courseId/enroll', authenticateToken, authorizeRole(['student']), async (req, res) => {
   const { courseId } = req.params;
-  const userIdFromToken = req.user.userId;
+  const userId = req.user.userId;
   try {
     const courseExists = await query('SELECT id FROM courses WHERE id = ?', [courseId]);
     if(courseExists.length === 0) {
         return res.status(404).json({ success: false, message: 'Course not found.' });
     }
-    // Using new table name and composite key for check
-    const alreadyEnrolled = await query('SELECT course_id FROM user_enrolled_courses WHERE user_id = ? AND course_id = ?', [userIdFromToken, courseId]);
+    const alreadyEnrolled = await query('SELECT id FROM enrollments WHERE userId = ? AND courseId = ?', [userId, courseId]);
     if (alreadyEnrolled.length > 0) {
       return res.status(409).json({ success: false, message: 'Already enrolled in this course.' });
     }
-    await query('INSERT INTO user_enrolled_courses (user_id, course_id, enrolled_at) VALUES (?, ?, NOW())', [userIdFromToken, courseId]);
-    await query('UPDATE courses SET enrollment_count = enrollment_count + 1 WHERE id = ?', [courseId]);
+    await query('INSERT INTO enrollments (userId, courseId, enrolledAt) VALUES (?, ?, NOW())', [userId, courseId]);
+    await query('UPDATE courses SET enrollmentCount = enrollmentCount + 1 WHERE id = ?', [courseId]);
     res.json({ success: true, message: 'Successfully enrolled!' });
   } catch (error) {
     console.error('Enrollment error:', error);
-    if (error.code === 'ER_DUP_ENTRY') { 
+    if (error.code === 'ER_DUP_ENTRY') { // Catch unique constraint violation if any
         return res.status(409).json({ success: false, message: 'Already enrolled (duplicate entry).' });
     }
     res.status(500).json({ success: false, message: 'Error enrolling in course.' });
@@ -440,17 +441,14 @@ app.post('/api/courses/:courseId/enroll', authenticateToken, authorizeRole(['stu
 });
 
 app.get('/api/users/me/enrolled-courses', authenticateToken, authorizeRole(['student']), async (req, res) => {
-  const userIdFromToken = req.user.userId;
+  const userId = req.user.userId;
   try {
-    const coursesData = await query(
-      `SELECT c.*, u.username as instructorName 
-       FROM courses c 
-       JOIN user_enrolled_courses uec ON c.id = uec.course_id 
-       JOIN users u ON c.instructor_id = u.id
-       WHERE uec.user_id = ? ORDER BY uec.enrolled_at DESC`, 
-      [userIdFromToken]
+    const courses = await query(
+      'SELECT c.* FROM courses c JOIN enrollments e ON c.id = e.courseId WHERE e.userId = ? ORDER BY e.enrolledAt DESC', 
+      [userId]
     );
-    res.json(coursesData.map(c => ({...c, lessons: [], quizIds: []})));
+    // Consistent with other course fetching, add empty lessons/quizIds if not fetching full details here
+    res.json(courses.map(c => ({...c, lessons: [], quizIds: []})));
   } catch (error) {
     console.error('Get enrolled courses error:', error);
     res.status(500).json({ message: 'Error fetching enrolled courses.' });
@@ -458,15 +456,10 @@ app.get('/api/users/me/enrolled-courses', authenticateToken, authorizeRole(['stu
 });
 
 app.get('/api/users/me/created-courses', authenticateToken, authorizeRole(['instructor']), async (req, res) => {
-  const instructorIdFromToken = req.user.userId;
+  const instructorId = req.user.userId;
   try {
-    const coursesData = await query(
-        `SELECT c.*, u.username as instructorName 
-         FROM courses c
-         JOIN users u ON c.instructor_id = u.id
-         WHERE c.instructor_id = ? ORDER BY c.created_at DESC`, [instructorIdFromToken]
-    );
-    res.json(coursesData.map(c => ({...c, lessons: [], quizIds: []})));
+    const courses = await query('SELECT * FROM courses WHERE instructorId = ? ORDER BY createdAt DESC', [instructorId]);
+    res.json(courses.map(c => ({...c, lessons: [], quizIds: []})));
   } catch (error) {
     console.error('Get created courses error:', error);
     res.status(500).json({ message: 'Error fetching created courses.' });
@@ -477,57 +470,56 @@ app.get('/api/users/me/created-courses', authenticateToken, authorizeRole(['inst
 // === Quiz Management ===
 app.post('/api/quizzes', authenticateToken, authorizeRole(['instructor']), async (req, res) => {
   const instructorIdFromToken = req.user.userId;
-  const { title, courseId, questions } = req.body; // DDL uses course_id
+  const { title, courseId, questions } = req.body;
 
   if (!title || !courseId || !questions || !Array.isArray(questions) || questions.length === 0) {
-    return res.status(400).json({ message: 'Quiz title, course_id, and at least one question are required.' });
+    return res.status(400).json({ message: 'Quiz title, courseId, and at least one question are required.' });
   }
-  const newQuizId = uuidv4();
   
   connection.beginTransaction(async (err) => {
     if (err) { return res.status(500).json({ message: 'Error starting transaction for quiz creation.' }); }
     try {
-      const courseCheck = await query('SELECT instructor_id FROM courses WHERE id = ?', [courseId]);
+      const courseCheck = await query('SELECT instructorId FROM courses WHERE id = ?', [courseId]);
       if (courseCheck.length === 0) {
         await query('ROLLBACK');
         return res.status(404).json({ message: 'Course not found.' });
       }
-      if (courseCheck[0].instructor_id !== instructorIdFromToken) {
+      if (courseCheck[0].instructorId !== instructorIdFromToken) {
         await query('ROLLBACK');
         return res.status(403).json({ message: 'Forbidden: You do not own the course for this quiz.' });
       }
 
-      await query('INSERT INTO quizzes (id, title, course_id, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())', [newQuizId, title, courseId]);
+      const quizResult = await query('INSERT INTO quizzes (title, courseId) VALUES (?, ?)', [title, courseId]);
+      const quizId = quizResult.insertId;
 
       for (const q of questions) {
         if (!q.text || !q.options || !Array.isArray(q.options) || q.options.length < 2 || !q.options.some(opt => opt.isCorrect)) {
             await query('ROLLBACK');
             return res.status(400).json({ message: `Invalid question data for: "${q.text || 'Untitled Question'}". Each question needs text, at least 2 options, and one correct answer.`});
         }
-        const newQuestionId = uuidv4();
-        await query('INSERT INTO quiz_questions (id, quiz_id, text, type, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())', 
-          [newQuestionId, newQuizId, q.text, q.type || 'mcq']);
+        const questionResult = await query('INSERT INTO quiz_questions (quizId, text, type) VALUES (?, ?, ?)', 
+          [quizId, q.text, q.type || 'mcq']);
+        const questionId = questionResult.insertId;
 
         for (const opt of q.options) {
           if (opt.text === undefined || opt.isCorrect === undefined) {
             await query('ROLLBACK');
-            return res.status(400).json({ message: `Invalid option data for question: "${q.text}". Options need text and is_correct flag.`});
+            return res.status(400).json({ message: `Invalid option data for question: "${q.text}". Options need text and isCorrect flag.`});
           }
-          const newOptionId = uuidv4();
-          await query('INSERT INTO quiz_question_options (id, question_id, text, is_correct, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())',
-            [newOptionId, newQuestionId, opt.text, opt.isCorrect ? 1 : 0]); // Store boolean as tinyint
+          await query('INSERT INTO quiz_options (questionId, text, isCorrect) VALUES (?, ?, ?)',
+            [questionId, opt.text, opt.isCorrect]);
         }
       }
       await query('COMMIT');
-      
-      const createdQuizResult = await query('SELECT * FROM quizzes WHERE id = ?', [newQuizId]);
-      const createdQuestionsRaw = await query('SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY question_order, id', [newQuizId]);
+      // Fetch the created quiz with its structure to return
+      const createdQuiz = await query('SELECT * FROM quizzes WHERE id = ?', [quizId]);
+      const createdQuestionsRaw = await query('SELECT * FROM quiz_questions WHERE quizId = ? ORDER BY id', [quizId]);
       const createdQuestions = [];
       for(const qRaw of createdQuestionsRaw) {
-        const options = await query('SELECT id, text, is_correct FROM quiz_question_options WHERE question_id = ? ORDER BY option_order, id', [qRaw.id]);
-        createdQuestions.push({...qRaw, options: options.map(o => ({...o, isCorrect: !!o.is_correct})) }); // Convert tinyint back to boolean
+        const options = await query('SELECT * FROM quiz_options WHERE questionId = ? ORDER BY id', [qRaw.id]);
+        createdQuestions.push({...qRaw, options});
       }
-      res.status(201).json({...createdQuizResult[0], questions: createdQuestions});
+      res.status(201).json({...createdQuiz[0], questions: createdQuestions});
     } catch (error) {
       await query('ROLLBACK');
       console.error('Create quiz error (transaction rolled back):', error);
@@ -536,7 +528,7 @@ app.post('/api/quizzes', authenticateToken, authorizeRole(['instructor']), async
   });
 });
 
-app.get('/api/quizzes/:quizId', async (req, res) => { 
+app.get('/api/quizzes/:quizId', async (req, res) => { // Can be public or protected based on needs
   const { quizId } = req.params;
   try {
     const quizResults = await query('SELECT * FROM quizzes WHERE id = ?', [quizId]);
@@ -544,11 +536,11 @@ app.get('/api/quizzes/:quizId', async (req, res) => {
       return res.status(404).json({ message: 'Quiz not found.' });
     }
     const quiz = quizResults[0];
-    const questionsRaw = await query('SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY question_order, id', [quizId]);
+    const questionsRaw = await query('SELECT * FROM quiz_questions WHERE quizId = ? ORDER BY orderIndex, id', [quizId]);
     const questions = [];
     for (const qRaw of questionsRaw) {
-      const options = await query('SELECT id, text, is_correct FROM quiz_question_options WHERE question_id = ? ORDER BY option_order, id', [qRaw.id]);
-      questions.push({ ...qRaw, options: options.map(o => ({...o, isCorrect: !!o.is_correct})) }); // Convert tinyint to boolean
+      const options = await query('SELECT id, text, isCorrect FROM quiz_options WHERE questionId = ? ORDER BY id', [qRaw.id]);
+      questions.push({ ...qRaw, options });
     }
     quiz.questions = questions;
     res.json(quiz);
@@ -558,10 +550,11 @@ app.get('/api/quizzes/:quizId', async (req, res) => {
   }
 });
 
-app.get('/api/courses/:courseId/quizzes', async (req, res) => { 
-  const { courseId } = req.params; // DDL uses course_id
+app.get('/api/courses/:courseId/quizzes', async (req, res) => { // Can be public or protected
+  const { courseId } = req.params;
   try {
-    const quizzes = await query('SELECT id, title FROM quizzes WHERE course_id = ? ORDER BY created_at', [courseId]);
+    const quizzes = await query('SELECT id, title FROM quizzes WHERE courseId = ? ORDER BY createdAt', [courseId]);
+    // For a list, typically just IDs and titles are fine. Full details can be fetched via /api/quizzes/:quizId
     res.json(quizzes);
   } catch (error) {
     console.error('Get quizzes for course error:', error);
@@ -570,49 +563,46 @@ app.get('/api/courses/:courseId/quizzes', async (req, res) => {
 });
 
 // === Quiz Attempts & Reports ===
-app.post('/api/quiz-attempts', authenticateToken, async (req, res) => { 
-  const { playerNickname, quizId, courseId, score, totalQuestions, isQuizWith } = req.body; // DDL uses quiz_id, course_id
-  const userIdFromToken = req.user ? req.user.userId : null; 
+app.post('/api/quiz-attempts', authenticateToken, async (req, res) => { // Or allow anonymous based on QuizWith
+  const { playerNickname, quizId, courseId, score, totalQuestions, isQuizWith } = req.body;
+  const userId = req.user ? req.user.userId : null; // Get userId if authenticated
 
   if (quizId === undefined || courseId === undefined || score === undefined || totalQuestions === undefined || isQuizWith === undefined) {
     return res.status(400).json({ message: "Missing required fields for quiz attempt." });
   }
-  if (!userIdFromToken && !playerNickname && isQuizWith) {
+  if (!userId && !playerNickname && isQuizWith) {
     return res.status(400).json({ message: "Nickname required for QuizWith guest attempts." });
   }
-  if (!userIdFromToken && !isQuizWith) { 
+  if (!userId && !isQuizWith) { // Regular quiz attempt must be by a logged-in user
     return res.status(401).json({ message: "User must be logged in to submit regular quiz attempts." });
   }
 
-  const finalUserId = isQuizWith ? (userIdFromToken || null) : userIdFromToken; 
+  const finalUserId = isQuizWith ? (userId || null) : userId; // If QuizWith, user might be logged in or guest. If regular, must be logged in.
   const finalNickname = isQuizWith ? playerNickname : null;
   const percentage = totalQuestions > 0 ? (score / totalQuestions) * 100 : 0;
 
   try {
+    const result = await query(
+      'INSERT INTO quiz_attempts (userId, playerNickname, quizId, courseId, score, totalQuestions, percentage, takenAt, isQuizWith) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?)',
+      [finalUserId, finalNickname, quizId, courseId, score, totalQuestions, percentage, isQuizWith]
+    );
+    // Fetch course and quiz titles for the response if needed, or rely on client having them
     const courseData = await query('SELECT title from courses WHERE id = ?', [courseId]);
     const quizData = await query('SELECT title from quizzes WHERE id = ?', [quizId]);
-    const courseTitle = courseData.length ? courseData[0].title : 'N/A';
-    const quizTitle = quizData.length ? quizData[0].title : 'N/A';
 
-    const newAttemptId = uuidv4();
-    await query(
-      'INSERT INTO quiz_attempts (id, user_id, player_nickname, quiz_id, course_id, score, total_questions, percentage, taken_at, is_quiz_with, quiz_title, course_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)',
-      [newAttemptId, finalUserId, finalNickname, quizId, courseId, score, totalQuestions, percentage, isQuizWith ? 1:0, quizTitle, courseTitle]
-    );
-    
     res.status(201).json({ 
-        id: newAttemptId, 
-        user_id: finalUserId, 
-        player_nickname: finalNickname, 
-        quiz_id: quizId, 
-        quizTitle: quizTitle,
-        course_id: courseId, 
-        courseTitle: courseTitle,
+        id: result.insertId, 
+        userId: finalUserId, 
+        playerNickname: finalNickname, 
+        quizId, 
+        quizTitle: quizData.length ? quizData[0].title : 'N/A',
+        courseId, 
+        courseTitle: courseData.length ? courseData[0].title : 'N/A',
         score, 
-        total_questions: totalQuestions, 
+        totalQuestions, 
         percentage, 
-        is_quiz_with: isQuizWith, 
-        taken_at: new Date().toISOString() 
+        isQuizWith, 
+        takenAt: new Date().toISOString() 
     });
   } catch (error) {
     console.error('Submit quiz score error:', error);
@@ -621,16 +611,18 @@ app.post('/api/quiz-attempts', authenticateToken, async (req, res) => {
 });
 
 app.get('/api/users/me/quiz-attempts', authenticateToken, authorizeRole(['student', 'instructor', 'admin']), async (req, res) => {
-  const userIdFromToken = req.user.userId;
+  const userId = req.user.userId;
   try {
     const attempts = await query(
-      `SELECT qa.* 
+      `SELECT qa.*, q.title as quizTitle, c.title as courseTitle 
        FROM quiz_attempts qa
-       WHERE qa.user_id = ? 
-       ORDER BY qa.taken_at DESC`, 
-      [userIdFromToken]
+       JOIN quizzes q ON qa.quizId = q.id
+       JOIN courses c ON qa.courseId = c.id
+       WHERE qa.userId = ? 
+       ORDER BY qa.takenAt DESC`, 
+      [userId]
     );
-    res.json(attempts.map(a => ({...a, is_quiz_with: !!a.is_quiz_with}))); // Ensure boolean
+    res.json(attempts);
   } catch (error) {
     console.error('Get user quiz attempts error:', error);
     res.status(500).json({ message: 'Error fetching user quiz attempts.' });
@@ -638,16 +630,16 @@ app.get('/api/users/me/quiz-attempts', authenticateToken, authorizeRole(['studen
 });
 
 app.get('/api/instructors/me/quizzes', authenticateToken, authorizeRole(['instructor']), async (req, res) => {
-    const instructorIdFromToken = req.user.userId;
+    const instructorId = req.user.userId;
     try {
-        const quizzesData = await query(
+        const quizzes = await query(
           `SELECT q.* FROM quizzes q 
-           JOIN courses c ON q.course_id = c.id 
-           WHERE c.instructor_id = ? 
-           ORDER BY q.created_at DESC`, 
-          [instructorIdFromToken]
+           JOIN courses c ON q.courseId = c.id 
+           WHERE c.instructorId = ? 
+           ORDER BY q.createdAt DESC`, 
+          [instructorId]
         );
-        res.json(quizzesData);
+        res.json(quizzes);
     } catch (error) {
         console.error('Get quizzes for instructor error:', error);
         res.status(500).json({ message: 'Error fetching quizzes for instructor.' });
@@ -655,18 +647,19 @@ app.get('/api/instructors/me/quizzes', authenticateToken, authorizeRole(['instru
 });
 
 app.get('/api/instructors/me/quiz-attempts', authenticateToken, authorizeRole(['instructor']), async (req, res) => {
-  const instructorIdFromToken = req.user.userId;
+  const instructorId = req.user.userId;
   try {
     const attempts = await query(
-      `SELECT qa.*, u.username as studentUsername, u.email as studentEmail
+      `SELECT qa.*, q.title as quizTitle, c.title as courseTitle, u.username as studentUsername, u.email as studentEmail
        FROM quiz_attempts qa
-       JOIN courses c ON qa.course_id = c.id
-       LEFT JOIN users u ON qa.user_id = u.id 
-       WHERE c.instructor_id = ?
-       ORDER BY qa.taken_at DESC`,
-      [instructorIdFromToken]
+       JOIN quizzes q ON qa.quizId = q.id
+       JOIN courses c ON qa.courseId = c.id
+       LEFT JOIN users u ON qa.userId = u.id 
+       WHERE c.instructorId = ?
+       ORDER BY qa.takenAt DESC`,
+      [instructorId]
     );
-    res.json(attempts.map(a => ({...a, is_quiz_with: !!a.is_quiz_with}))); // Ensure boolean
+    res.json(attempts);
   } catch (error) {
     console.error('Get instructor quiz attempts error:', error);
     res.status(500).json({ message: 'Error fetching instructor quiz attempts for their courses.' });
@@ -676,40 +669,38 @@ app.get('/api/instructors/me/quiz-attempts', authenticateToken, authorizeRole(['
 
 // === QuizWith (Kahoot-style) Functionality ===
 app.post('/api/quizwith/host', authenticateToken, authorizeRole(['instructor']), async (req, res) => {
-  const hostUserIdFromToken = req.user.userId;
-  const { quizId } = req.body; // DDL uses quiz_id
+  const hostUserId = req.user.userId;
+  const { quizId } = req.body;
 
   if (!quizId) return res.status(400).json({ message: "Quiz ID is required." });
 
   try {
     const quizCheck = await query(
-      `SELECT q.id, q.title as quiz_title, q.course_id, c.instructor_id 
+      `SELECT q.id, q.title, c.instructorId 
        FROM quizzes q 
-       JOIN courses c ON q.course_id = c.id 
+       JOIN courses c ON q.courseId = c.id 
        WHERE q.id = ?`, [quizId]);
        
     if (quizCheck.length === 0) {
       return res.status(404).json({ message: 'Quiz not found.' });
     }
-    if (quizCheck[0].instructor_id !== hostUserIdFromToken) {
+    if (quizCheck[0].instructorId !== hostUserId) {
       return res.status(403).json({ message: 'Forbidden: You do not own the course this quiz belongs to.' });
     }
-    const questionsExist = await query('SELECT id FROM quiz_questions WHERE quiz_id = ? LIMIT 1', [quizId]);
+    const questionsExist = await query('SELECT id FROM quiz_questions WHERE quizId = ? LIMIT 1', [quizId]);
     if (questionsExist.length === 0) {
       return res.status(400).json({ message: 'Cannot host QuizWith: The selected quiz has no questions.' });
     }
 
     const pin = Math.floor(100000 + Math.random() * 900000).toString();
-    // Using new table name active_quiz_with_sessions
-    await query(
-      'INSERT INTO active_quiz_with_sessions (pin, quiz_id, host_user_id, status, course_id, quiz_title, created_at, updated_at) VALUES (?, ?, ?, \'waiting\', ?, ?, NOW(), NOW())',
-      [pin, quizId, hostUserIdFromToken, quizCheck[0].course_id, quizCheck[0].quiz_title]
+    // Check for PIN collision, though unlikely with 6 digits. Retry if needed for production.
+    const result = await query(
+      'INSERT INTO quizwith_sessions (pin, quizId, hostUserId, status, createdAt) VALUES (?, ?, ?, \'waiting\', NOW())',
+      [pin, quizId, hostUserId]
     );
-    // sessionId is not part of active_quiz_with_sessions DDL as pin is PRI. If client needs a session identifier other than PIN, backend needs to generate it.
-    // For now, PIN is the primary identifier.
-    res.json({ pin, sessionId: pin }); // Returning PIN as sessionId for consistency if client expects it.
+    res.json({ pin, sessionId: result.insertId });
   } catch (error) {
-    if (error.code === 'ER_DUP_ENTRY' && error.message.includes("'pin'")) { 
+    if (error.code === 'ER_DUP_ENTRY' && error.message.includes("'pin'")) { // Handle rare PIN collision
         return res.status(500).json({ message: 'Error hosting QuizWith session due to PIN conflict. Please try again.' });
     }
     console.error('Host QuizWith session error:', error);
@@ -717,35 +708,36 @@ app.post('/api/quizwith/host', authenticateToken, authorizeRole(['instructor']),
   }
 });
 
-app.post('/api/quizwith/join', async (req, res) => { 
+app.post('/api/quizwith/join', async (req, res) => { // No token needed for guests to join
   const { pin, nickname } = req.body;
   if (!pin || !nickname) {
     return res.status(400).json({ success: false, message: 'PIN and nickname are required.' });
   }
   try {
-    // Using new table name
     const sessions = await query(
-      `SELECT pin, quiz_id, course_id, status 
-       FROM active_quiz_with_sessions
-       WHERE pin = ?`, [pin.toUpperCase()]
+      `SELECT s.id as sessionId, s.quizId, q.courseId, s.status 
+       FROM quizwith_sessions s
+       JOIN quizzes q ON s.quizId = q.id
+       WHERE s.pin = ?`, [pin.toUpperCase()] // Assuming PINs are stored/compared case-insensitively or consistently
     );
     if (sessions.length === 0) {
       return res.status(404).json({ success: false, message: 'Invalid PIN.' });
     }
     const session = sessions[0];
-    if (session.status !== 'waiting') { 
+    if (session.status !== 'waiting') { // Could also allow joining 'active' sessions if logic supports it
       return res.status(400).json({ success: false, message: 'This QuizWith session is not currently accepting new players.' });
     }
-    
-    // TODO (unchanged): Add player to the session (e.g., in a quizwith_players table).
-    // const playerResult = await query('INSERT INTO quizwith_players (sessionId, nickname, joinedAt) VALUES (?, ?, NOW())', [session.pin, nickname]); // Assuming pin acts as sessionId for players table
+
+    // TODO: Add player to the session (e.g., in a quizwith_players table).
+    // For now, we just acknowledge they can join.
+    // const playerResult = await query('INSERT INTO quizwith_players (sessionId, nickname, joinedAt) VALUES (?, ?, NOW())', [session.sessionId, nickname]);
     
     res.json({ 
       success: true, 
       message: 'Joined successfully!', 
-      quizId: session.quiz_id, 
-      courseId: session.course_id, 
-      sessionId: session.pin // Returning pin as sessionId
+      quizId: session.quizId, 
+      courseId: session.courseId, 
+      sessionId: session.sessionId 
     });
   } catch (error) {
     console.error('Join QuizWith session error:', error);
@@ -753,20 +745,20 @@ app.post('/api/quizwith/join', async (req, res) => {
   }
 });
 
-app.get('/api/quizwith/sessions/:pin', async (req, res) => { 
+app.get('/api/quizwith/sessions/:pin', async (req, res) => { // Can be public for players to check status
   const { pin } = req.params;
   try {
-    // Using new table name and column names
     const sessions = await query(
-      `SELECT * 
-       FROM active_quiz_with_sessions
-       WHERE pin = ?`, [pin.toUpperCase()]
+      `SELECT s.*, q.title as quizTitle 
+       FROM quizwith_sessions s 
+       JOIN quizzes q ON s.quizId = q.id 
+       WHERE s.pin = ?`, [pin.toUpperCase()]
     );
     if (sessions.length === 0) {
       return res.status(404).json({ message: 'Session not found.' });
     }
-    // TODO (unchanged): Optionally, fetch player list for the session:
-    // const players = await query('SELECT nickname FROM quizwith_players WHERE sessionId = ?', [sessions[0].pin]); // Assuming pin as sessionId reference
+    // TODO: Optionally, fetch player list for the session:
+    // const players = await query('SELECT nickname FROM quizwith_players WHERE sessionId = ?', [sessions[0].id]);
     // sessions[0].players = players;
     res.json(sessions[0]);
   } catch (error) {
@@ -775,18 +767,22 @@ app.get('/api/quizwith/sessions/:pin', async (req, res) => {
   }
 });
 
-// TODO (unchanged): Add endpoints for QuizWith game progression (e.g., start quiz, next question, show leaderboard)
+// TODO: Add endpoints for QuizWith game progression (e.g., start quiz, next question, show leaderboard)
 // These would likely involve WebSockets for real-time communication.
 
 // --- Live Video Sessions (Placeholders) ---
 app.post('/api/live-sessions/:courseId/start', authenticateToken, authorizeRole(['instructor']), (req, res) => {
-    const { courseId } = req.params; // DDL uses course_id
+    const { courseId } = req.params;
+    //const instructorId = req.user.userId;
+    // TODO: Logic to create/manage a live session room (e.g., using a third-party service or custom WebRTC signaling)
     console.log(`Instructor ${req.user.userId} trying to start live session for course ${courseId}`);
     res.json({ sessionId: `live-${courseId}-${Date.now()}`, message: "Live session initiated (placeholder)." });
 });
 
 app.post('/api/live-sessions/:sessionId/join', authenticateToken, (req, res) => {
     const { sessionId } = req.params;
+    //const userId = req.user.userId;
+    // TODO: Logic for a user to join a session, handle WebRTC signaling.
     console.log(`User ${req.user.userId} trying to join live session ${sessionId}`);
     res.json({ success: true, message: "Joined live session (placeholder)." });
 });

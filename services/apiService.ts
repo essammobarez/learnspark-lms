@@ -1,168 +1,96 @@
-import { User, Course, Quiz, Lesson, QuizAttempt, UserRole, ActiveQuizWithSession } from '../types';
+import { User, Course, Quiz, Lesson, QuizAttempt, UserRole } from '../types';
+import { mockApiService as mockApi } from './mockApiService'; // Import the mock service
 
-// Base URL for your backend API
-const API_BASE_URL = 'http://localhost:3001/api'; // Adjust if your backend runs elsewhere
-
-// Helper function to handle API responses
-async function handleResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    let errorMessage = `API Error: ${response.status} ${response.statusText}`;
-    try {
-      // Try to parse error response as JSON, which might contain a 'message' field
-      const errorData = await response.json();
-      errorMessage = errorData.message || errorMessage;
-    } catch (e) {
-      // If response is not JSON or error occurs during parsing, use the original status text.
-      // console.warn("Could not parse error response as JSON:", e); 
-    }
-    throw new Error(errorMessage);
-  }
-  if (response.status === 204) { // No Content
-    return undefined as T; 
-  }
-  // Assuming successful responses are JSON. If not, this could also throw.
-  return response.json() as Promise<T>;
-}
-
-// Helper function to make requests
-async function makeRequest<T>(
-  endpoint: string,
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-  body?: any,
-  isProtected: boolean = true // Most routes are protected
-): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  };
-
-  if (isProtected) {
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    } else {
-      console.warn(`No auth token found for protected route: ${url}`);
-    }
-  }
-
-  const config: RequestInit = {
-    method,
-    headers,
-  };
-
-  if (body !== undefined) {
-    config.body = JSON.stringify(body);
-  }
-
-  try {
-    const response = await fetch(url, config);
-    return handleResponse<T>(response);
-  } catch (networkError) {
-    // This catch block handles errors from the fetch() call itself (e.g., server not reachable)
-    console.error(`Network error during fetch to ${url}:`, networkError);
-    const specificMessage = `Failed to connect to the server at ${url}. Please ensure the backend is running and accessible. Original error: ${(networkError as Error).message}`;
-    throw new Error(specificMessage);
-  }
-}
-
+// The actual API service now delegates to the mock service.
+// In a real application, this file might conditionally use mock or real API calls.
 export const apiService = {
   // --- Auth ---
-  login: async (email: string, password: string): Promise<{ token: string; user: User }> => {
-    return makeRequest<{ token: string; user: User }>('/auth/login', 'POST', { email, password }, false);
+  login: async (email: string, password_unused: string): Promise<{ token: string; user: User }> => {
+    return mockApi.login(email, password_unused);
   },
 
-  signup: async (username: string, email: string, password: string, role: UserRole): Promise<{ success: boolean; message: string; user?: User }> => {
-    return makeRequest<{ success: boolean; message: string; user?: User }>('/auth/signup', 'POST', { username, email, password, role }, false);
+  signup: async (username: string, email: string, password_unused: string, role: UserRole): Promise<{ success: boolean; message: string; user?: User }> => {
+    return mockApi.signup(username, email, password_unused, role);
   },
 
   getCurrentUser: async (): Promise<User | null> => {
-    try {
-      return await makeRequest<User>('/auth/me', 'GET');
-    } catch (error) {
-      console.error("Error fetching current user:", error);
-      return null;
-    }
+    return mockApi.getCurrentUser();
   },
 
   // --- Courses ---
   getCourses: async (): Promise<Course[]> => {
-    return makeRequest<Course[]>('/courses', 'GET', undefined, false);
+    return mockApi.getCourses();
   },
 
   getCourseById: async (courseId: string): Promise<Course | null> => {
-    return makeRequest<Course | null>(`/courses/${courseId}`, 'GET', undefined, false); 
+    return mockApi.getCourseById(courseId);
   },
 
   createCourse: async (courseData: Omit<Course, 'id' | 'instructorName' | 'rating' | 'enrollmentCount'>): Promise<Course> => {
-    return makeRequest<Course>('/courses', 'POST', courseData);
+    return mockApi.createCourse(courseData);
   },
 
   updateCourse: async (courseId: string, courseData: Partial<Omit<Course, 'id' | 'instructorId' | 'instructorName' | 'rating' | 'enrollmentCount'>>): Promise<Course | null> => {
-    return makeRequest<Course | null>(`/courses/${courseId}`, 'PUT', courseData);
+    return mockApi.updateCourse(courseId, courseData);
   },
   
   addLessonToCourse: async (courseId: string, lessonData: Omit<Lesson, 'id'>): Promise<Lesson | null> => {
-    return makeRequest<Lesson | null>(`/courses/${courseId}/lessons`, 'POST', lessonData);
+    return mockApi.addLessonToCourse(courseId, lessonData);
   },
 
   // --- Quizzes ---
   getQuizById: async (quizId: string): Promise<Quiz | null> => {
-    return makeRequest<Quiz | null>(`/quizzes/${quizId}`, 'GET', undefined, false); 
+    return mockApi.getQuizById(quizId);
   },
 
   createQuiz: async (quizData: Omit<Quiz, 'id'>): Promise<Quiz> => {
-    return makeRequest<Quiz>('/quizzes', 'POST', quizData);
+    return mockApi.createQuiz(quizData);
   },
   
   getQuizzesForCourse: async (courseId: string): Promise<Quiz[]> => {
-    return makeRequest<Quiz[]>(`/courses/${courseId}/quizzes`, 'GET', undefined, false);
+    return mockApi.getQuizzesForCourse(courseId);
   },
 
   // --- Enrollments ---
   enrollInCourse: async (courseId: string): Promise<{ success: boolean; message?: string }> => {
-    return makeRequest<{ success: boolean; message?: string }>(`/courses/${courseId}/enroll`, 'POST');
+    return mockApi.enrollInCourse(courseId);
   },
 
   getEnrolledCourses: async (): Promise<Course[]> => {
-    return makeRequest<Course[]>('/users/me/enrolled-courses', 'GET');
+    return mockApi.getEnrolledCourses();
   },
 
   getCreatedCourses: async (): Promise<Course[]> => {
-    return makeRequest<Course[]>('/users/me/created-courses', 'GET');
+    return mockApi.getCreatedCourses();
   },
 
   // --- Quiz Attempts & Reports ---
   submitQuizScore: async (attemptData: Omit<QuizAttempt, 'id' | 'takenAt' | 'percentage' | 'courseTitle'>): Promise<QuizAttempt> => {
-    return makeRequest<QuizAttempt>('/quiz-attempts', 'POST', attemptData);
+    return mockApi.submitQuizScore(attemptData);
   },
 
   getQuizAttemptsForUser: async (): Promise<QuizAttempt[]> => {
-    return makeRequest<QuizAttempt[]>('/users/me/quiz-attempts', 'GET');
+    return mockApi.getQuizAttemptsForUser();
   },
 
   getQuizzesForInstructor: async (): Promise<Quiz[]> => {
-    return makeRequest<Quiz[]>('/instructors/me/quizzes', 'GET');
+    return mockApi.getQuizzesForInstructor();
   },
 
   getQuizAttemptsForInstructorQuizzes: async (): Promise<QuizAttempt[]> => {
-    return makeRequest<QuizAttempt[]>('/instructors/me/quiz-attempts', 'GET');
+    return mockApi.getQuizAttemptsForInstructorQuizzes();
   },
 
   // --- QuizWith (Kahoot-style) Game Session Management ---
   hostQuizWithSession: async (quizId: string): Promise<{ pin: string; sessionId: string }> => {
-    return makeRequest<{ pin: string; sessionId: string }>('/quizwith/host', 'POST', { quizId });
+    return mockApi.hostQuizWithSession(quizId);
   },
 
   joinQuizWithSession: async (pin: string, nickname: string): Promise<{ success: boolean; message?: string; quizId?: string; courseId?: string; sessionId?: string }> => {
-    return makeRequest<{ success: boolean; message?: string; quizId?: string; courseId?: string; sessionId?: string }>(
-      '/quizwith/join', 
-      'POST', 
-      { pin, nickname },
-      false 
-    );
+    return mockApi.joinQuizWithSession(pin, nickname);
   },
   
-  getQuizWithSessionByPin: async (pin: string): Promise<ActiveQuizWithSession | null> => { 
-    return makeRequest<ActiveQuizWithSession | null>(`/quizwith/sessions/${pin}`, 'GET', undefined, false);
+  getQuizWithSessionByPin: async (pin: string): Promise<any> => { // Adjust 'any' to a proper type if available for ActiveQuizWithSession
+    return mockApi.getQuizWithSessionByPin(pin);
   },
 };
