@@ -1,10 +1,10 @@
-
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { APP_NAME, ROUTES } from '../constants';
 import { UserRole } from '../types';
 import Button from './Button';
+import ThemeToggleButton from './ThemeToggleButton'; // Added import for ThemeToggleButton
 
 const Navbar: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuth();
@@ -28,6 +28,8 @@ const Navbar: React.FC = () => {
             <Link to={ROUTES.COURSE_LIST} className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 px-2 py-1 rounded-md text-sm font-medium transition-colors">Courses</Link>
             <Link to={ROUTES.JOIN_QUIZ_WITH} className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 px-2 py-1 rounded-md text-sm font-semibold transition-colors">Join QuizWith</Link>
             
+            <ThemeToggleButton /> {/* Added ThemeToggleButton here */}
+
             {isAuthenticated && user ? (
               <>
                 {user.role === UserRole.STUDENT && (
