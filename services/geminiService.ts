@@ -4,7 +4,7 @@ import { GeneratedQuizQuestion, QuizQuestion, QuizQuestionOption } from '../type
 
 // Attempt to get API_KEY from window.process.env if it exists (e.g., for local demo/dev)
 // This is NOT recommended for production. API keys should be on a backend.
-const API_KEY_PLACEHOLDER = "YOUR_GEMINI_API_KEY"; // Common placeholder
+const API_KEY_PLACEHOLDER = "AIzaSyBc5aYkMzhnxesvdCzQ9zuc8QZaShbBuOA"; // Common placeholder
 let apiKeyFromEnv: string | undefined = undefined;
 
 if (typeof window !== 'undefined' && (window as any).process && (window as any).process.env && (window as any).process.env.API_KEY) {
