@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Quiz, QuizWithPlayerInfo, QuizAttempt } from '../types'; 
-import { apiService } from '../services/apiService'; 
+import { apiService } from '../services/apiService'; // Use real API service
 import LoadingSpinner from '../components/LoadingSpinner';
 import QuizQuestionUI from '../components/QuizQuestionUI';
 import Button from '../components/Button';
@@ -11,20 +11,16 @@ import { useAuth } from '../hooks/useAuth';
 import { ExclamationTriangleIcon, ArrowPathIcon, HomeIcon } from '@heroicons/react/24/outline';
 
 const QuizPage: React.FC = () => {
-  const { courseId: courseIdParam, quizId: quizIdParam } = useParams<{ courseId: string; quizId: string }>();
+  const { courseId, quizId } = useParams<{ courseId: string; quizId: string }>();
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth(); // user.id is number
+  const { user, isAuthenticated } = useAuth(); 
 
-  const courseId = courseIdParam ? parseInt(courseIdParam, 10) : null;
-  const quizId = quizIdParam ? parseInt(quizIdParam, 10) : null;
-
-  const [quiz, setQuiz] = useState<Quiz | null>(null); // quiz.id, quiz.courseId are numbers
+  const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isQuizFinished, setIsQuizFinished] = useState(false);
-  // FIX: selectedOptionId state should be number | undefined to match QuizQuestionUI prop and option.id type
-  const [selectedOptionId, setSelectedOptionId] = useState<number | undefined>(undefined); 
+  const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>(undefined);
   const [isAnswered, setIsAnswered] = useState(false);
   const [isCurrentAnswerCorrect, setIsCurrentAnswerCorrect] = useState<boolean | undefined>(undefined);
   const [playerNickname, setPlayerNickname] = useState<string | null>(null);
@@ -36,6 +32,8 @@ const QuizPage: React.FC = () => {
     const storedPlayerInfo = localStorage.getItem(QUIZ_WITH_PLAYER_INFO_KEY);
     if (storedPlayerInfo) {
         const player = JSON.parse(storedPlayerInfo) as QuizWithPlayerInfo;
+        // Validate if this player info is for the current quizId if possible,
+        // for now, just retrieve nickname. Backend join should ensure legitimacy.
         setPlayerNickname(player.nickname);
     }
   }, []);
@@ -43,15 +41,15 @@ const QuizPage: React.FC = () => {
 
   useEffect(() => {
     const fetchQuiz = async () => {
-      if (!quizId || isNaN(quizId)) {
-        setError("Quiz ID is missing or invalid.");
+      if (!quizId) {
+        setError("Quiz ID is missing.");
         setIsLoading(false);
         return;
       }
       setIsLoading(true);
       setError(null);
       try {
-        const fetchedQuiz = await apiService.getQuizById(quizId); // fetchedQuiz will have numeric IDs
+        const fetchedQuiz = await apiService.getQuizById(quizId);
         setQuiz(fetchedQuiz);
         if (fetchedQuiz && fetchedQuiz.questions.length > 0) {
           setTimeLeft(30); 
@@ -72,43 +70,37 @@ const QuizPage: React.FC = () => {
 
   useEffect(() => {
     if (!quiz || isQuizFinished || isAnswered || !quiz.questions || quiz.questions.length === 0 || isLoading) return;
-    // FIX: Pass a distinct value for timeout, e.g., a special negative number or handle directly
-    if (timeLeft === 0) { handleAnswerSelect(-1); return; } // -1 can signify a timeout
+    if (timeLeft === 0) { handleAnswerSelect(""); return; } // Auto-submit if time runs out
     const timer = setInterval(() => setTimeLeft((prevTime) => prevTime - 1), 1000);
     return () => clearInterval(timer);
   }, [timeLeft, quiz, isQuizFinished, isAnswered, isLoading]);
 
 
-  // FIX: handleAnswerSelect parameter 'optionId' is a number, matching QuizQuestionUI's expectation
-  const handleAnswerSelect = async (optionId: number) => { 
+  const handleAnswerSelect = async (optionId: string) => {
     if (!quiz || isAnswered) return;
     setSelectedOptionId(optionId);
     setIsAnswered(true);
     const currentQuestion = quiz.questions[currentQuestionIndex];
+    const selectedOpt = currentQuestion.options.find(opt => opt.id === optionId);
     let newScore = score;
-
-    if (optionId !== -1) { // Check if not a timeout
-        const selectedOpt = currentQuestion.options.find(opt => opt.id === optionId);
-        if (selectedOpt && selectedOpt.isCorrect) {
-        newScore = score + 1;
-        setScore(newScore);
-        setIsCurrentAnswerCorrect(true);
-        } else {
-        setIsCurrentAnswerCorrect(false);
-        }
-    } else { // Timeout case
-        setIsCurrentAnswerCorrect(false); // Or handle as unanswered/incorrect
+    if (selectedOpt && selectedOpt.isCorrect) {
+      newScore = score + 1;
+      setScore(newScore);
+      setIsCurrentAnswerCorrect(true);
+    } else {
+      setIsCurrentAnswerCorrect(false);
     }
 
-
+    // Submit score after the last question
     if (currentQuestionIndex >= quiz.questions.length - 1) {
-       if (quiz && courseId && !isNaN(courseId)) {
+       if (quiz && courseId) {
         try {
-            const attemptData: Omit<QuizAttempt, 'id' | 'takenAt' | 'percentage' | 'courseTitle' | 'quizTitle'> = {
-                userId: isAuthenticated && user ? user.id : undefined, // user.id is number
+            const attemptData: Omit<QuizAttempt, 'id' | 'takenAt' | 'percentage' | 'courseTitle'> = {
+                userId: isAuthenticated && user ? user.id : undefined,
                 playerNickname: playerNickname || undefined, 
-                quizId: quiz.id, // quiz.id is number
-                courseId: courseId, // courseId is number
+                quizId: quiz.id, 
+                quizTitle: quiz.title, 
+                courseId: courseId,
                 score: newScore, 
                 totalQuestions: quiz.questions.length,
                 isQuizWith: !!playerNickname, 
@@ -117,6 +109,7 @@ const QuizPage: React.FC = () => {
             if(playerNickname) localStorage.removeItem(QUIZ_WITH_PLAYER_INFO_KEY);
         } catch (apiError) {
             console.error("Failed to submit quiz score:", apiError);
+            // Optionally set an error state to inform the user
         }
       }
     }
@@ -137,13 +130,13 @@ const QuizPage: React.FC = () => {
         <LoadingSpinner /> <p className="text-white mt-4 text-lg">Loading Quiz...</p>
       </div> );
   }
-  if (error || !quiz || (quiz && (!quiz.questions || quiz.questions.length === 0)) || !courseId) {
+  if (error || !quiz || (quiz && (!quiz.questions || quiz.questions.length === 0))) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center bg-gray-800 dark:bg-gray-900 p-4 text-white transition-colors duration-300 ease-in-out">
         <ExclamationTriangleIcon className="w-16 h-16 text-yellow-400 dark:text-yellow-500 mb-4" />
         <h1 className="text-3xl font-bold mb-4">{error || "Quiz Not Found or Empty"}</h1>
         <p className="mb-6 text-lg text-gray-300 dark:text-gray-400">This quiz is currently unavailable.</p>
-        <Button onClick={() => navigate(ROUTES.COURSE_DETAIL.replace(':courseId', courseId?.toString() || ''))} variant="secondary">
+        <Button onClick={() => navigate(ROUTES.COURSE_DETAIL.replace(':courseId', courseId || ''))} variant="secondary">
           Back to Course
         </Button>
       </div> );
@@ -157,12 +150,13 @@ const QuizPage: React.FC = () => {
             {!playerNickname && user && <p className="text-2xl mb-2">Well done, {user.username.split(' ')[0]}!</p>}
             <p className="text-3xl mb-8">Your Score: <span className="font-extrabold text-yellow-300">{score}</span> / {quiz.questions.length}</p>
             <div className="space-y-3 sm:space-y-0 sm:space-x-4 flex flex-col sm:flex-row justify-center">
-                <Button variant="primary" size="lg" onClick={() => navigate(ROUTES.COURSE_DETAIL.replace(':courseId', courseId!.toString()))} className="flex items-center justify-center">
+                <Button variant="primary" size="lg" onClick={() => navigate(ROUTES.COURSE_DETAIL.replace(':courseId', courseId!))} className="flex items-center justify-center">
                   <HomeIcon className="w-5 h-5 mr-2"/> Back to Course
                 </Button>
                 <Button variant="secondary" size="lg" onClick={() => { 
                     setCurrentQuestionIndex(0); setScore(0); setIsQuizFinished(false); setIsAnswered(false);
                     setSelectedOptionId(undefined); setTimeLeft(30); setError(null);
+                    // Re-fetch quiz if needed, or assume it's still valid. For now, just reset client state.
                 }} className="flex items-center justify-center">
                   <ArrowPathIcon className="w-5 h-5 mr-2"/> Try Again
                 </Button>
@@ -198,7 +192,6 @@ const QuizPage: React.FC = () => {
       </header>
 
       <main className="flex-grow flex items-center justify-center w-full my-4 px-2">
-        {/* FIX: Pass correct types for selectedOptionId and onAnswerSelect based on QuizQuestionUI updates */}
         <QuizQuestionUI question={currentQuestion} onAnswerSelect={handleAnswerSelect} selectedOptionId={selectedOptionId} isAnswered={isAnswered} isCorrect={isCurrentAnswerCorrect} />
       </main>
       

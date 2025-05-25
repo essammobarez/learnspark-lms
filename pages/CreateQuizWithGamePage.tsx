@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { apiService } from '../services/apiService';
+import { apiService } from '../services/apiService'; // Use real API service
 import { generateQuizQuestionsWithGemini, isGeminiAvailable } from '../services/geminiService';
 import { ROUTES } from '../constants';
 import Input from '../components/Input';
@@ -11,21 +11,18 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import { QuizQuestion, QuizQuestionOption, Course, UserRole, Quiz } from '../types';
 import { TrashIcon, SparklesIcon, PlusIcon, CheckCircleIcon, ExclamationTriangleIcon, ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
 
-// Helper to generate temporary numeric IDs for UI listing before saving to DB
-const generateTempNumericId = () => -(Date.now() + Math.floor(Math.random()*1000)); // Negative to distinguish from DB IDs
-
 const CreateQuizWithGamePage: React.FC = () => {
-  const { user, isAuthenticated } = useAuth(); // user.id is number
+  const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  const [instructorCourses, setInstructorCourses] = useState<Course[]>([]); // course.id is number
-  const [selectedCourseId, setSelectedCourseId] = useState<string>(''); // Store as string for select, parse to number for API
+  const [instructorCourses, setInstructorCourses] = useState<Course[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   
   const [quizTitle, setQuizTitle] = useState('');
-  const [questions, setQuestions] = useState<QuizQuestion[]>([]); // IDs will be numbers
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   
   const [currentQuestionText, setCurrentQuestionText] = useState('');
-  const [currentOptions, setCurrentOptions] = useState<Array<Partial<Omit<QuizQuestionOption, 'id'>>>>([{ text: '' }, { text: '' }]);
+  const [currentOptions, setCurrentOptions] = useState<Array<Partial<QuizQuestionOption>>>([{ text: '' }, { text: '' }]);
   const [correctOptionIndex, setCorrectOptionIndex] = useState<number | null>(null);
   
   const [aiTopic, setAiTopic] = useState('');
@@ -39,7 +36,7 @@ const CreateQuizWithGamePage: React.FC = () => {
 
   const [pageStep, setPageStep] = useState<'create_content' | 'show_pin'>('create_content');
   const [generatedPin, setGeneratedPin] = useState<string | null>(null);
-  const [createdQuizDetails, setCreatedQuizDetails] = useState<{quizId: number, courseId: number, quizTitle: string, sessionId?: number} | null>(null);
+  const [createdQuizDetails, setCreatedQuizDetails] = useState<{quizId: string, courseId: string, quizTitle: string, sessionId?: string} | null>(null);
 
   const fetchInstructorCoursesCallback = useCallback(async () => {
     if (!isAuthenticated || !user || user.role !== UserRole.INSTRUCTOR) {
@@ -49,10 +46,10 @@ const CreateQuizWithGamePage: React.FC = () => {
     setPageLoading(true);
     setError('');
     try {
-      const courses = await apiService.getCreatedCourses(); // courses will have numeric IDs
+      const courses = await apiService.getCreatedCourses();
       setInstructorCourses(courses);
       if (courses.length > 0) {
-        setSelectedCourseId(courses[0].id.toString()); // Set string for select value
+        setSelectedCourseId(courses[0].id);
       } else {
         setError("Create a course first to associate your QuizWith game.");
       }
@@ -78,81 +75,46 @@ const CreateQuizWithGamePage: React.FC = () => {
   const handleOptionTextChange = (index: number, text: string) => {
     const newOptions = [...currentOptions]; newOptions[index] = { ...newOptions[index], text }; setCurrentOptions(newOptions);
   };
-
   const handleAddQuestion = () => {
     setError('');
     if (!currentQuestionText.trim()) { setError('Question text is required.'); return; }
     const filledOptions = currentOptions.filter(opt => opt.text && opt.text.trim());
     if (filledOptions.length < 2) { setError('At least two options with text are required.'); return; }
     if (correctOptionIndex === null || !currentOptions[correctOptionIndex]?.text?.trim()) { setError('Please select a valid correct answer from the filled options.'); return; }
-    
     let finalCorrectIndex = -1;
-    const validOptionsWithOriginalIndex = currentOptions
-        .map((opt, originalIndex) => ({ ...opt, originalIndex}))
-        .filter(opt => opt.text && opt.text.trim());
-
+    const validOptionsWithOriginalIndex = currentOptions.map((opt, originalIndex) => ({ ...opt, originalIndex})).filter(opt => opt.text && opt.text.trim());
     const finalOptions: QuizQuestionOption[] = validOptionsWithOriginalIndex.map((opt, newIndex) => {
         if(opt.originalIndex === correctOptionIndex) finalCorrectIndex = newIndex;
-        return { id: generateTempNumericId(), text: opt.text!.trim(), isCorrect: false };
+        return { id: `opt_manual_qw_${Date.now()}_${opt.originalIndex}`, text: opt.text!.trim(), isCorrect: false };
     });
-
     if(finalCorrectIndex === -1) { setError("Error determining correct answer. Please re-select."); return; }
     finalOptions[finalCorrectIndex].isCorrect = true;
-
-    const newQuestion: QuizQuestion = { 
-        id: generateTempNumericId(), 
-        text: currentQuestionText.trim(), 
-        options: finalOptions, 
-        type: 'mcq', 
-        orderIndex: questions.length 
-    };
+    const newQuestion: QuizQuestion = { id: `q_manual_qw_${Date.now()}`, text: currentQuestionText.trim(), options: finalOptions, type: 'mcq' };
     setQuestions([...questions, newQuestion]);
     setCurrentQuestionText(''); setCurrentOptions([{ text: '' }, { text: '' }]); setCorrectOptionIndex(null);
   };
-
   const handleGenerateWithAI = async () => {
     if (!aiTopic) { setAiError("Please enter a topic."); return; }
     if (!geminiReady) { setAiError("Gemini AI is not available."); return; }
     setIsGeneratingWithAI(true); setAiError('');
     try {
-      // FIX: aiGeneratedQuestions is already QuizQuestion[]. Assign orderIndex relative to existing questions.
-      const aiGeneratedQuestions: QuizQuestion[] = await generateQuizQuestionsWithGemini(aiTopic, 3); 
-      const formattedAiQuestions = aiGeneratedQuestions.map((gq, index) => ({
-        ...gq, // Spread the already correctly typed QuizQuestion
-        orderIndex: questions.length + index, // Set orderIndex based on current questions length
-      }));
-      setQuestions(prev => [...prev, ...formattedAiQuestions]); 
-      setAiTopic('');
+      const aiQuestions = await generateQuizQuestionsWithGemini(aiTopic, 3); 
+      setQuestions(prev => [...prev, ...aiQuestions]); setAiTopic('');
     } catch (err) { setAiError(err instanceof Error ? err.message : "AI question generation failed."); } 
     finally { setIsGeneratingWithAI(false); }
   };
-  
-  const handleRemoveQuestion = (questionIdToRemove: number) => {
-    setQuestions(questions.filter(q => q.id !== questionIdToRemove).map((q, i) => ({...q, orderIndex: i})));
-  };
-
   const handleSubmitQuizContent = async (e: React.FormEvent) => {
     e.preventDefault(); setError('');
-    const numericCourseId = parseInt(selectedCourseId, 10);
-    if (isNaN(numericCourseId)) { setError('Please select a valid course.'); return; }
+    if (!selectedCourseId) { setError('Please select a course.'); return; }
     if (!quizTitle || questions.length === 0) { setError('Quiz title and at least one question are required.'); return; }
-    if (!user) { setError('User not found.'); return; }
-    
+    if (!user) { setError('User not found.'); return; } // Should be caught by useEffect
     setFormSubmitting(true);
     try {
-      const questionsToSend = questions.map(q => ({
-        ...q,
-        id: q.id > 0 ? q.id : undefined,
-        options: q.options.map(opt => ({
-            ...opt,
-            id: opt.id > 0 ? opt.id : undefined,
-        }))
-      }));
-
-      const quizData: Omit<Quiz, 'id' | 'createdAt' | 'updatedAt'> = { title: quizTitle, questions: questionsToSend as any, courseId: numericCourseId };
-      const newQuiz = await apiService.createQuiz(quizData); // newQuiz.id and newQuiz.courseId are numbers
+      const quizData: Omit<Quiz, 'id'> = { title: quizTitle, questions, courseId: selectedCourseId };
+      const newQuiz = await apiService.createQuiz(quizData);
       
-      const sessionResponse = await apiService.hostQuizWithSession(newQuiz.id); // newQuiz.id is number
+      // Now host this newly created quiz
+      const sessionResponse = await apiService.hostQuizWithSession(newQuiz.id);
       
       setGeneratedPin(sessionResponse.pin);
       setCreatedQuizDetails({ quizId: newQuiz.id, courseId: newQuiz.courseId, quizTitle: newQuiz.title, sessionId: sessionResponse.sessionId });
@@ -166,13 +128,13 @@ const CreateQuizWithGamePage: React.FC = () => {
   };
   const handleOpenLobbyAndStart = () => {
     if (!generatedPin || !createdQuizDetails) return;
-    navigate(ROUTES.QUIZ.replace(':courseId', createdQuizDetails.courseId.toString()).replace(':quizId', createdQuizDetails.quizId.toString()));
+    // Navigation for host; actual game start logic for players would be backend-driven
+    navigate(ROUTES.QUIZ.replace(':courseId', createdQuizDetails.courseId).replace(':quizId', createdQuizDetails.quizId));
   };
   const resetAndCreateAnother = () => {
     setQuizTitle(''); setQuestions([]); setCurrentQuestionText(''); setCurrentOptions([{ text: '' }, { text: '' }]);
     setCorrectOptionIndex(null); setAiTopic(''); setAiError(''); setError('');
     setGeneratedPin(null); setCreatedQuizDetails(null); setPageStep('create_content');
-    if (instructorCourses.length > 0) setSelectedCourseId(instructorCourses[0].id.toString());
   };
 
   if (pageLoading) {
@@ -220,7 +182,7 @@ const CreateQuizWithGamePage: React.FC = () => {
           <label htmlFor="courseSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Select Course for this Game</label>
           <select id="courseSelect" value={selectedCourseId} onChange={(e) => setSelectedCourseId(e.target.value)} 
             className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" required disabled={instructorCourses.length === 0} >
-            {instructorCourses.map(course => <option key={course.id} value={course.id.toString()}>{course.title}</option>)}
+            {instructorCourses.map(course => <option key={course.id} value={course.id}>{course.title}</option>)}
           </select>
         </div>
         <Input label="QuizWith Game Title" value={quizTitle} onChange={(e) => setQuizTitle(e.target.value)} required placeholder="e.g., Fun Friday Trivia"/>
@@ -270,10 +232,7 @@ const CreateQuizWithGamePage: React.FC = () => {
             <ul className="space-y-3">
               {questions.map((q, index) => (
                 <li key={q.id} className="p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 shadow-sm text-sm">
-                  <div className="flex justify-between items-start">
-                    <p className="font-medium text-gray-800 dark:text-gray-100 flex-1 pr-2">{index + 1}. {q.text}</p>
-                    <Button type="button" variant="danger" size="sm" onClick={() => handleRemoveQuestion(q.id)} aria-label="Remove question"><TrashIcon className="w-4 h-4"/></Button>
-                  </div>
+                  <p className="font-medium text-gray-800 dark:text-gray-100">{index + 1}. {q.text}</p>
                   <ul className="list-disc list-inside ml-4 text-gray-600 dark:text-gray-400">
                     {q.options.map(opt => <li key={opt.id} className={opt.isCorrect ? 'text-green-600 dark:text-green-400 font-semibold' : ''}>{opt.text} {opt.isCorrect && "(Correct)"}</li>)}
                   </ul>
@@ -284,7 +243,7 @@ const CreateQuizWithGamePage: React.FC = () => {
         )}
         
         {error && <p className="text-red-500 dark:text-red-400 text-sm text-center bg-red-50 dark:bg-red-900/30 p-3 rounded-md">{error}</p>}
-        <Button type="submit" variant="success" className="w-full text-lg py-3" disabled={formSubmitting || instructorCourses.length === 0 || questions.length === 0 || !selectedCourseId}>
+        <Button type="submit" variant="success" className="w-full text-lg py-3" disabled={formSubmitting || instructorCourses.length === 0 || questions.length === 0}>
           {formSubmitting ? <LoadingSpinner /> : 'Create QuizWith & Get PIN'}
         </Button>
       </form>

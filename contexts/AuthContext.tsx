@@ -1,7 +1,7 @@
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { User, UserRole } from '../types';
-import { apiService } from '../services/apiService'; 
+import { apiService } from '../services/apiService'; // Use the new apiService
 
 interface AuthContextType {
   user: User | null;
@@ -11,7 +11,7 @@ interface AuthContextType {
   login: (email: string, password_unused: string) => Promise<boolean>;
   signup: (username: string, email: string, password_unused: string, role: UserRole) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
-  fetchCurrentUser: () => Promise<void>; 
+  fetchCurrentUser: () => Promise<void>; // Method to reload user data if needed
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,10 +28,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const fetchCurrentUser = useCallback(async () => {
     const currentToken = localStorage.getItem('authToken');
     if (currentToken) {
-      setToken(currentToken); 
+      setToken(currentToken); // Ensure token state is up-to-date
       try {
         setIsLoading(true);
-        const fetchedUser = await apiService.getCurrentUser(); // This should return User with numeric ID
+        const fetchedUser = await apiService.getCurrentUser();
         setUser(fetchedUser);
       } catch (error) {
         console.error("Session restore failed:", error);
@@ -55,7 +55,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (email: string, password_unused: string): Promise<boolean> => {
     setIsLoading(true);
     try {
-      const { token: newAuthToken, user: loggedInUser } = await apiService.login(email, password_unused); // loggedInUser has numeric ID
+      const { token: newAuthToken, user: loggedInUser } = await apiService.login(email, password_unused);
       localStorage.setItem('authToken', newAuthToken);
       setToken(newAuthToken);
       setUser(loggedInUser);
@@ -71,12 +71,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signup = async (username: string, email: string, password_unused: string, role: UserRole): Promise<{ success: boolean; message: string }> => {
     setIsLoading(true);
     try {
-      // apiService.signup should return a user object with numeric ID if successful, or just success/message
       const result = await apiService.signup(username, email, password_unused, role);
       setIsLoading(false);
-      // If signup implies login, might need to call fetchCurrentUser or set user from result.user
-      // For now, it just returns success/message. Login is separate.
-      return result; 
+      return result; // Return { success, message }
     } catch (error) {
       console.error("Signup failed:", error);
       setIsLoading(false);
@@ -88,7 +85,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setUser(null);
     setToken(null);
     localStorage.removeItem('authToken');
-    // Optionally, could call an API endpoint to invalidate token on backend
+    // Optionally, redirect or notify backend about logout
   };
   
   return (

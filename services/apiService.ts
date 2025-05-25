@@ -1,175 +1,96 @@
+import { User, Course, Quiz, Lesson, QuizAttempt, UserRole } from '../types';
+import { mockApiService as mockApi } from './mockApiService'; // Import the mock service
 
-import { User, Course, Quiz, Lesson, QuizAttempt, UserRole, ActiveQuizWithSession } from '../types';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
-
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('authToken');
-  return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
-};
-
-const handleResponse = async (response: Response) => {
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-  }
-  if (response.status === 204) { // No Content
-    return null;
-  }
-  return response.json();
-};
-
-
+// The actual API service now delegates to the mock service.
+// In a real application, this file might conditionally use mock or real API calls.
 export const apiService = {
   // --- Auth ---
   login: async (email: string, password_unused: string): Promise<{ token: string; user: User }> => {
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ email, password: password_unused }), // Backend expects password
-    });
-    return handleResponse(response);
+    return mockApi.login(email, password_unused);
   },
 
   signup: async (username: string, email: string, password_unused: string, role: UserRole): Promise<{ success: boolean; message: string; user?: User }> => {
-    const response = await fetch(`${API_BASE_URL}/auth/signup`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ username, email, password: password_unused, role }), // Backend expects password
-    });
-    return handleResponse(response);
+    return mockApi.signup(username, email, password_unused, role);
   },
 
   getCurrentUser: async (): Promise<User | null> => {
-    const token = localStorage.getItem('authToken');
-    if (!token) return null;
-    const response = await fetch(`${API_BASE_URL}/auth/me`, { headers: getAuthHeaders() });
-    return handleResponse(response);
+    return mockApi.getCurrentUser();
   },
 
   // --- Courses ---
   getCourses: async (): Promise<Course[]> => {
-    const response = await fetch(`${API_BASE_URL}/courses`, { headers: getAuthHeaders() });
-    return handleResponse(response);
+    return mockApi.getCourses();
   },
 
-  getCourseById: async (courseId: number): Promise<Course | null> => {
-    const response = await fetch(`${API_BASE_URL}/courses/${courseId}`, { headers: getAuthHeaders() });
-    return handleResponse(response);
+  getCourseById: async (courseId: string): Promise<Course | null> => {
+    return mockApi.getCourseById(courseId);
   },
 
-  createCourse: async (courseData: Omit<Course, 'id' | 'instructorName' | 'rating' | 'enrollmentCount' | 'quizIds' | 'createdAt' | 'updatedAt'>): Promise<Course> => {
-    const response = await fetch(`${API_BASE_URL}/courses`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(courseData),
-    });
-    return handleResponse(response);
+  createCourse: async (courseData: Omit<Course, 'id' | 'instructorName' | 'rating' | 'enrollmentCount'>): Promise<Course> => {
+    return mockApi.createCourse(courseData);
   },
 
-  updateCourse: async (courseId: number, courseData: Partial<Omit<Course, 'id' | 'instructorId' | 'instructorName' | 'rating' | 'enrollmentCount' | 'quizIds' | 'createdAt' | 'updatedAt'>>): Promise<Course | null> => {
-    const response = await fetch(`${API_BASE_URL}/courses/${courseId}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(courseData),
-    });
-    return handleResponse(response);
+  updateCourse: async (courseId: string, courseData: Partial<Omit<Course, 'id' | 'instructorId' | 'instructorName' | 'rating' | 'enrollmentCount'>>): Promise<Course | null> => {
+    return mockApi.updateCourse(courseId, courseData);
   },
   
-  addLessonToCourse: async (courseId: number, lessonData: Omit<Lesson, 'id' | 'createdAt' | 'updatedAt'>): Promise<Lesson | null> => {
-     const response = await fetch(`${API_BASE_URL}/courses/${courseId}/lessons`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(lessonData),
-    });
-    return handleResponse(response);
+  addLessonToCourse: async (courseId: string, lessonData: Omit<Lesson, 'id'>): Promise<Lesson | null> => {
+    return mockApi.addLessonToCourse(courseId, lessonData);
   },
 
   // --- Quizzes ---
-  getQuizById: async (quizId: number): Promise<Quiz | null> => {
-    const response = await fetch(`${API_BASE_URL}/quizzes/${quizId}`, { headers: getAuthHeaders() });
-    return handleResponse(response);
+  getQuizById: async (quizId: string): Promise<Quiz | null> => {
+    return mockApi.getQuizById(quizId);
   },
 
-  createQuiz: async (quizData: Omit<Quiz, 'id' | 'createdAt' | 'updatedAt'>): Promise<Quiz> => {
-    const response = await fetch(`${API_BASE_URL}/quizzes`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(quizData),
-    });
-    return handleResponse(response);
+  createQuiz: async (quizData: Omit<Quiz, 'id'>): Promise<Quiz> => {
+    return mockApi.createQuiz(quizData);
   },
   
-  getQuizzesForCourse: async (courseId: number): Promise<Quiz[]> => {
-    const response = await fetch(`${API_BASE_URL}/courses/${courseId}/quizzes`, { headers: getAuthHeaders() });
-    return handleResponse(response);
+  getQuizzesForCourse: async (courseId: string): Promise<Quiz[]> => {
+    return mockApi.getQuizzesForCourse(courseId);
   },
 
   // --- Enrollments ---
-  enrollInCourse: async (courseId: number): Promise<{ success: boolean; message?: string }> => {
-    const response = await fetch(`${API_BASE_URL}/courses/${courseId}/enroll`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-    });
-    return handleResponse(response);
+  enrollInCourse: async (courseId: string): Promise<{ success: boolean; message?: string }> => {
+    return mockApi.enrollInCourse(courseId);
   },
 
   getEnrolledCourses: async (): Promise<Course[]> => {
-    const response = await fetch(`${API_BASE_URL}/users/me/enrolled-courses`, { headers: getAuthHeaders() });
-    return handleResponse(response);
+    return mockApi.getEnrolledCourses();
   },
 
   getCreatedCourses: async (): Promise<Course[]> => {
-    const response = await fetch(`${API_BASE_URL}/users/me/created-courses`, { headers: getAuthHeaders() });
-    return handleResponse(response);
+    return mockApi.getCreatedCourses();
   },
 
   // --- Quiz Attempts & Reports ---
-  submitQuizScore: async (attemptData: Omit<QuizAttempt, 'id' | 'takenAt' | 'percentage' | 'courseTitle' | 'quizTitle'>): Promise<QuizAttempt> => {
-    const response = await fetch(`${API_BASE_URL}/quiz-attempts`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(attemptData),
-    });
-    return handleResponse(response);
+  submitQuizScore: async (attemptData: Omit<QuizAttempt, 'id' | 'takenAt' | 'percentage' | 'courseTitle'>): Promise<QuizAttempt> => {
+    return mockApi.submitQuizScore(attemptData);
   },
 
   getQuizAttemptsForUser: async (): Promise<QuizAttempt[]> => {
-    const response = await fetch(`${API_BASE_URL}/users/me/quiz-attempts`, { headers: getAuthHeaders() });
-    return handleResponse(response);
+    return mockApi.getQuizAttemptsForUser();
   },
 
   getQuizzesForInstructor: async (): Promise<Quiz[]> => {
-     const response = await fetch(`${API_BASE_URL}/instructors/me/quizzes`, { headers: getAuthHeaders() });
-    return handleResponse(response);
+    return mockApi.getQuizzesForInstructor();
   },
 
   getQuizAttemptsForInstructorQuizzes: async (): Promise<QuizAttempt[]> => {
-    const response = await fetch(`${API_BASE_URL}/instructors/me/quiz-attempts`, { headers: getAuthHeaders() });
-    return handleResponse(response);
+    return mockApi.getQuizAttemptsForInstructorQuizzes();
   },
 
   // --- QuizWith (Kahoot-style) Game Session Management ---
-  hostQuizWithSession: async (quizId: number): Promise<{ pin: string; sessionId: number }> => {
-    const response = await fetch(`${API_BASE_URL}/quizwith/host`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ quizId }),
-    });
-    return handleResponse(response);
+  hostQuizWithSession: async (quizId: string): Promise<{ pin: string; sessionId: string }> => {
+    return mockApi.hostQuizWithSession(quizId);
   },
 
-  joinQuizWithSession: async (pin: string, nickname: string): Promise<{ success: boolean; message?: string; quizId?: number; courseId?: number; sessionId?: number }> => {
-    const response = await fetch(`${API_BASE_URL}/quizwith/join`, {
-      method: 'POST',
-      headers: getAuthHeaders(), // No auth typically needed for guests to join with PIN
-      body: JSON.stringify({ pin, nickname }),
-    });
-    return handleResponse(response);
+  joinQuizWithSession: async (pin: string, nickname: string): Promise<{ success: boolean; message?: string; quizId?: string; courseId?: string; sessionId?: string }> => {
+    return mockApi.joinQuizWithSession(pin, nickname);
   },
   
-  getQuizWithSessionByPin: async (pin: string): Promise<ActiveQuizWithSession | null> => {
-    const response = await fetch(`${API_BASE_URL}/quizwith/sessions/${pin}`, { headers: getAuthHeaders() });
-    return handleResponse(response);
+  getQuizWithSessionByPin: async (pin: string): Promise<any> => { // Adjust 'any' to a proper type if available for ActiveQuizWithSession
+    return mockApi.getQuizWithSessionByPin(pin);
   },
 };

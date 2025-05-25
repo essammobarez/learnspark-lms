@@ -29,8 +29,10 @@ const Shapes: React.FC<{ index: number, className?: string }>[] = [
 
 interface QuizQuestionUIProps {
   question: QuizQuestion;
-  onAnswerSelect: (optionId: string) => void;
-  selectedOptionId?: string;
+  // FIX: Changed onAnswerSelect to expect number for optionId
+  onAnswerSelect: (optionId: number) => void;
+  // FIX: Changed selectedOptionId to be number | undefined
+  selectedOptionId?: number;
   isAnswered?: boolean;
   isCorrect?: boolean;
 }
@@ -53,6 +55,7 @@ const QuizQuestionUI: React.FC<QuizQuestionUIProps> = ({ question, onAnswerSelec
               colorClass = 'bg-green-600 dark:bg-green-500'; // Correct answer color
               baseButtonClass += ' scale-105 ring-4 ring-white dark:ring-gray-300'; // Highlight correct
               ringFocusClass = ''; // Ring already applied
+            // FIX: option.id (number) compared with selectedOptionId (number | undefined)
             } else if (option.id === selectedOptionId && !option.isCorrect) {
               colorClass = 'bg-red-700 dark:bg-red-600'; // Incorrect selected answer
               baseButtonClass += ' opacity-70 dark:opacity-60';
@@ -68,6 +71,7 @@ const QuizQuestionUI: React.FC<QuizQuestionUIProps> = ({ question, onAnswerSelec
           return (
             <button
               key={option.id}
+              // FIX: onAnswerSelect expects number, option.id is number
               onClick={() => !isAnswered && onAnswerSelect(option.id)}
               disabled={isAnswered}
               className={`${baseButtonClass} ${colorClass} ${ringFocusClass}`}

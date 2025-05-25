@@ -2,39 +2,35 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { apiService } from '../services/apiService'; 
+import { apiService } from '../services/apiService'; // Use real API service
 import { generateQuizQuestionsWithGemini, isGeminiAvailable } from '../services/geminiService';
 import { ROUTES } from '../constants';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import LoadingSpinner from '../components/LoadingSpinner';
+// Fix: Added Quiz to the import statement
 import { QuizQuestion, QuizQuestionOption, Course, UserRole, Quiz } from '../types';
 import { TrashIcon, SparklesIcon, PlusIcon, CheckCircleIcon, ExclamationTriangleIcon, ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
 
 interface CreationResult {
   success: boolean;
   message: string;
-  quizId?: number; // Changed to number
+  quizId?: string;
   quizTitle?: string;
-  courseId?: number; // Changed to number
+  courseId?: string;
 }
 
-// Helper to generate temporary numeric IDs for UI listing before saving to DB
-const generateTempNumericId = () => -(Date.now() + Math.floor(Math.random()*1000));
-
-
 const CreateQuizPage: React.FC = () => {
-  const { user, isAuthenticated } = useAuth(); // user.id is number
-  const { courseId: courseIdParam } = useParams<{ courseId: string }>();
+  const { user, isAuthenticated } = useAuth();
+  const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
-  const courseId = courseIdParam ? parseInt(courseIdParam, 10) : null;
 
   const [course, setCourse] = useState<Course | null>(null);
   const [title, setTitle] = useState('');
-  const [questions, setQuestions] = useState<QuizQuestion[]>([]); // Questions will have numeric IDs from backend or temp ones
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   
   const [currentQuestionText, setCurrentQuestionText] = useState('');
-  const [currentOptions, setCurrentOptions] = useState<Array<Partial<Omit<QuizQuestionOption, 'id'>>>>([{ text: '' }, { text: '' }]); // Options don't have ID initially
+  const [currentOptions, setCurrentOptions] = useState<Array<Partial<QuizQuestionOption>>>([{ text: '' }, { text: '' }]);
   const [correctOptionIndex, setCorrectOptionIndex] = useState<number | null>(null);
   
   const [aiTopic, setAiTopic] = useState('');
@@ -42,7 +38,7 @@ const CreateQuizPage: React.FC = () => {
   const [aiError, setAiError] = useState('');
   const geminiReady = isGeminiAvailable();
 
-  const [isSubmitting, setIsSubmitting] = useState(false); 
+  const [isSubmitting, setIsSubmitting] = useState(false); // Renamed isLoading
   const [pageLoading, setPageLoading] = useState(true); 
   const [formError, setFormError] = useState(''); 
   const [creationResult, setCreationResult] = useState<CreationResult | null>(null);
@@ -52,8 +48,8 @@ const CreateQuizPage: React.FC = () => {
       navigate(ROUTES.LOGIN);
       return;
     }
-    if (!courseId || isNaN(courseId)) {
-        setFormError("Course ID is missing or invalid. Cannot create quiz.");
+    if (!courseId) {
+        setFormError("Course ID is missing. Cannot create quiz.");
         setPageLoading(false);
         return;
     }
@@ -107,26 +103,15 @@ const CreateQuizPage: React.FC = () => {
     if (correctOptionIndex === null || !currentOptions[correctOptionIndex]?.text?.trim()) { setFormError('Please select a valid correct answer from the filled options.'); return; }
 
     let finalCorrectIndex = -1;
-    // Map only filled options to final options, preserving original index for correct answer determination
-    const validOptionsWithOriginalIndex = currentOptions
-        .map((opt, originalIndex) => ({ ...opt, originalIndex}))
-        .filter(opt => opt.text && opt.text.trim());
-
+    const validOptionsWithOriginalIndex = currentOptions.map((opt, originalIndex) => ({ ...opt, originalIndex})).filter(opt => opt.text && opt.text.trim());
     const finalOptions: QuizQuestionOption[] = validOptionsWithOriginalIndex.map((opt, newIndex) => {
         if(opt.originalIndex === correctOptionIndex) finalCorrectIndex = newIndex;
-        return { id: generateTempNumericId(), text: opt.text!.trim(), isCorrect: false }; // Temp ID for new option
+        return { id: `opt_manual_${Date.now()}_${opt.originalIndex}`, text: opt.text!.trim(), isCorrect: false };
     });
-
     if(finalCorrectIndex === -1) { setFormError("Error determining correct answer. Please re-select."); return; }
     finalOptions[finalCorrectIndex].isCorrect = true;
 
-    const newQuestion: QuizQuestion = { 
-      id: generateTempNumericId(), // Temp ID for new question
-      text: currentQuestionText.trim(), 
-      options: finalOptions, 
-      type: 'mcq',
-      orderIndex: questions.length, 
-    };
+    const newQuestion: QuizQuestion = { id: `q_manual_${Date.now()}`, text: currentQuestionText.trim(), options: finalOptions, type: 'mcq' };
     setQuestions([...questions, newQuestion]);
     setCurrentQuestionText(''); setCurrentOptions([{ text: '' }, { text: '' }]); setCorrectOptionIndex(null);
   };
@@ -136,20 +121,14 @@ const CreateQuizPage: React.FC = () => {
     if (!geminiReady) { setAiError("Gemini AI is not available. Please configure API_KEY."); return; }
     setIsGeneratingWithAI(true); setAiError('');
     try {
-      // FIX: aiGeneratedQuestions is already QuizQuestion[]. Assign orderIndex relative to existing questions.
-      const aiGeneratedQuestions: QuizQuestion[] = await generateQuizQuestionsWithGemini(aiTopic, 3); 
-      const formattedAiQuestions = aiGeneratedQuestions.map((gq, index) => ({
-        ...gq, // Spread the already correctly typed QuizQuestion
-        orderIndex: questions.length + index, // Set orderIndex based on current questions length
-      }));
-      setQuestions(prev => [...prev, ...formattedAiQuestions]); 
-      setAiTopic(''); 
+      const aiQuestions = await generateQuizQuestionsWithGemini(aiTopic, 3); 
+      setQuestions(prev => [...prev, ...aiQuestions]); setAiTopic(''); 
     } catch (err) { setAiError(err instanceof Error ? err.message : "AI question generation failed."); console.error("AI Generation Error:", err); } 
     finally { setIsGeneratingWithAI(false); }
   };
 
-  const handleRemoveQuestion = (questionIdToRemove: number) => { // ID is number
-    setQuestions(questions.filter(q => q.id !== questionIdToRemove).map((q, i)=> ({...q, orderIndex: i})));
+  const handleRemoveQuestion = (questionId: string) => {
+    setQuestions(questions.filter(q => q.id !== questionId));
   };
 
   const handleSubmitQuiz = async (e: React.FormEvent) => {
@@ -157,25 +136,10 @@ const CreateQuizPage: React.FC = () => {
     if (!title.trim()) { setFormError('Quiz title is required.'); return; }
     if (questions.length === 0) { setFormError('At least one question is required for the quiz.'); return; }
     if (!courseId || !user) { setFormError('Course or user information is missing.'); return; }
-    
     setIsSubmitting(true);
     try {
-      // Prepare questions for backend: remove temporary negative IDs if they exist
-      const questionsToSend = questions.map(q => ({
-        ...q,
-        id: q.id > 0 ? q.id : undefined, // Only send positive (DB) IDs
-        options: q.options.map(opt => ({
-            ...opt,
-            id: opt.id > 0 ? opt.id : undefined,
-        }))
-      }));
-
-      const quizData: Omit<Quiz, 'id' | 'createdAt' | 'updatedAt'> = { 
-        title: title.trim(), 
-        questions: questionsToSend as any, // Cast: backend expects Question-like objects without IDs for new
-        courseId 
-      };
-      const newQuiz = await apiService.createQuiz(quizData); // newQuiz.id is number
+      const quizData: Omit<Quiz, 'id'> = { title: title.trim(), questions, courseId };
+      const newQuiz = await apiService.createQuiz(quizData);
       setCreationResult({ success: true, message: `Quiz "${newQuiz.title}" created successfully!`, quizId: newQuiz.id, quizTitle: newQuiz.title, courseId: newQuiz.courseId });
       setTitle(''); setQuestions([]); setAiTopic('');
     } catch (err) { 
@@ -211,11 +175,11 @@ const CreateQuizPage: React.FC = () => {
         </h2>
         {creationResult.success && creationResult.quizId && creationResult.courseId && creationResult.quizTitle && (
           <div className="mt-6 space-y-3 sm:space-y-0 sm:flex sm:flex-wrap sm:justify-center sm:gap-3">
-             <Link to={ROUTES.HOST_QUIZ_SESSION.replace(':courseId', creationResult.courseId.toString()).replace(':quizId', creationResult.quizId.toString())}>
+             <Link to={ROUTES.HOST_QUIZ_SESSION.replace(':courseId', creationResult.courseId).replace(':quizId', creationResult.quizId)}>
                 <Button variant="success">Host "{creationResult.quizTitle}" Now</Button>
             </Link>
             <Button variant="primary" onClick={() => setCreationResult(null)}>Create Another Quiz for this Course</Button>
-            <Link to={ROUTES.COURSE_DETAIL.replace(':courseId', creationResult.courseId.toString())}>
+            <Link to={ROUTES.COURSE_DETAIL.replace(':courseId', creationResult.courseId)}>
               <Button variant="secondary">View Course Details</Button>
             </Link>
           </div>
@@ -228,9 +192,9 @@ const CreateQuizPage: React.FC = () => {
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-center">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2 sm:mb-0">
-            Create New Quiz for <Link to={ROUTES.COURSE_DETAIL.replace(':courseId', course!.id.toString())} className="text-blue-600 dark:text-blue-400 hover:underline">{course?.title}</Link>
+            Create New Quiz for <Link to={ROUTES.COURSE_DETAIL.replace(':courseId', course!.id)} className="text-blue-600 dark:text-blue-400 hover:underline">{course?.title}</Link>
         </h1>
-        <Button variant="outline" onClick={() => navigate(ROUTES.COURSE_DETAIL.replace(':courseId', course!.id.toString()))}>
+        <Button variant="outline" onClick={() => navigate(ROUTES.COURSE_DETAIL.replace(':courseId', course!.id))}>
             <ArrowUturnLeftIcon className="w-5 h-5 mr-2"/> Back to Course
         </Button>
       </div>

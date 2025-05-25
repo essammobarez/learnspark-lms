@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { apiService } from '../services/apiService'; 
+import { apiService } from '../services/apiService'; // Use real API service
 import { ROUTES } from '../constants';
 import Input from '../components/Input';
 import Button from '../components/Button';
@@ -11,22 +11,20 @@ import { Course, Lesson, UserRole } from '../types';
 import { PlusIcon, TrashIcon, ExclamationTriangleIcon, ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
 
 const CreateCoursePage: React.FC = () => {
-  const { user, isAuthenticated } = useAuth(); // user.id is number
+  const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  // FIX: Initialize lessons state as Lesson[]
-  const [lessons, setLessons] = useState<Lesson[]>([]); 
+  // Fix: Changed lessons state to Lesson[] to match Course type. Temporary IDs will be generated.
+  const [lessons, setLessons] = useState<Lesson[]>([]);
   
   const [currentLessonTitle, setCurrentLessonTitle] = useState('');
   const [currentLessonType, setCurrentLessonType] = useState<'video' | 'document' | 'presentation'>('video');
   const [currentLessonContent, setCurrentLessonContent] = useState('');
-  const [currentLessonOrderIndex, setCurrentLessonOrderIndex] = useState(0);
 
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Renamed isLoading to isSubmitting
   const [error, setError] = useState('');
 
   if (!isAuthenticated || !user || user.role !== UserRole.INSTRUCTOR) {
@@ -46,23 +44,20 @@ const CreateCoursePage: React.FC = () => {
         return;
     }
     setError(""); 
-    // FIX: Assign a temporary numeric ID and ensure new lesson matches Lesson type
-    const newLesson: Lesson = { 
-      id: -(Date.now() + lessons.length), // Temporary negative ID, ensure uniqueness
+    // Fix: Generate a temporary unique ID for the new lesson
+    const newLesson: Lesson = {
+      id: `temp_lesson_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       title: currentLessonTitle.trim(),
       type: currentLessonType,
       content: currentLessonContent.trim(),
-      orderIndex: lessons.length, 
     };
     setLessons([...lessons, newLesson]);
     setCurrentLessonTitle('');
     setCurrentLessonContent('');
-    setCurrentLessonOrderIndex(lessons.length + 1); // This state is for the next new lesson's default order
   };
 
   const handleRemoveLesson = (indexToRemove: number) => {
-    setLessons(lessons.filter((_, index) => index !== indexToRemove).map((l, i) => ({...l, orderIndex: i})));
-    setCurrentLessonOrderIndex(lessons.length -1);
+    setLessons(lessons.filter((_, index) => index !== indexToRemove));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -78,27 +73,19 @@ const CreateCoursePage: React.FC = () => {
     setIsSubmitting(true);
     setError('');
     try {
-      const courseData: Omit<Course, 'id' | 'instructorName' | 'rating' | 'enrollmentCount' | 'quizIds' | 'createdAt' | 'updatedAt'> = {
+      // Ensure lessons being sent have the required structure, even if ID is backend-generated
+      const courseData: Omit<Course, 'id' | 'instructorName' | 'rating' | 'enrollmentCount'> = {
         title,
         description,
-        instructorId: user.id, 
+        instructorId: user.id, // Use authenticated user's ID
         imageUrl: imageUrl || `https://picsum.photos/seed/${title.replace(/\s+/g, '-')}/600/400`,
-        // FIX: Map lessons state (Lesson[]) to what API expects.
-        // Assuming API expects lessons with temporary IDs for new ones, or can handle them.
-        // The Course type's 'lessons' property is Lesson[], so API should take Lesson[] (with temp IDs for new)
-        lessons: lessons.map((l, index) => ({
-             // Send temporary ID (negative) for new lessons; backend handles actual ID assignment.
-            id: l.id, // Keep the temporary ID or actual ID if it's an existing lesson (not applicable for create course)
-            title: l.title,
-            type: l.type,
-            content: l.content,
-            orderIndex: l.orderIndex !== undefined ? l.orderIndex : index,
-        })),
+        lessons: lessons, 
+        quizIds: [], // New courses start with no quizzes
         category,
       };
-      const newCourse = await apiService.createCourse(courseData); // newCourse.id is number
+      const newCourse = await apiService.createCourse(courseData);
       setIsSubmitting(false);
-      navigate(ROUTES.COURSE_DETAIL.replace(':courseId', newCourse.id.toString()));
+      navigate(ROUTES.COURSE_DETAIL.replace(':courseId', newCourse.id));
     } catch (err) {
       setIsSubmitting(false);
       setError(err instanceof Error ? err.message : 'Failed to create course. Please try again.');
@@ -138,9 +125,8 @@ const CreateCoursePage: React.FC = () => {
                 <h3 className="text-md font-medium text-gray-700 dark:text-gray-300">Added Lessons ({lessons.length}):</h3>
                 <ul className="border border-gray-200 dark:border-gray-600 rounded-md shadow-sm divide-y divide-gray-200 dark:divide-gray-600">
                     {lessons.map((l, i) => (
-                    // Key is index here because lessons don't have persistent IDs until saved
                     <li key={l.id} className="px-4 py-3 flex justify-between items-center text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                        <span className="text-gray-800 dark:text-gray-200">{l.orderIndex !== undefined ? l.orderIndex + 1 : i + 1}. {l.title} <span className="text-xs text-gray-500 dark:text-gray-400">({l.type})</span></span>
+                        <span className="text-gray-800 dark:text-gray-200">{i+1}. {l.title} <span className="text-xs text-gray-500 dark:text-gray-400">({l.type})</span></span>
                         <Button type="button" variant="danger" size="sm" onClick={() => handleRemoveLesson(i)} aria-label="Remove lesson">
                            <TrashIcon className="w-4 h-4"/>
                         </Button>

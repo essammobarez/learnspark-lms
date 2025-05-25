@@ -4,42 +4,43 @@ import { GeneratedQuizQuestion, QuizQuestion, QuizQuestionOption } from '../type
 
 // Attempt to get API_KEY from window.process.env if it exists (e.g., for local demo/dev)
 // This is NOT recommended for production. API keys should be on a backend.
-// FIX: Use process.env.API_KEY as per guidelines
-const apiKeyFromEnv: string | undefined = process.env.API_KEY;
+const API_KEY_PLACEHOLDER = "YOUR_GEMINI_API_KEY"; // Common placeholder
+let apiKeyFromEnv: string | undefined = undefined;
 
+if (typeof window !== 'undefined' && (window as any).process && (window as any).process.env && (window as any).process.env.API_KEY) {
+  apiKeyFromEnv = (window as any).process.env.API_KEY;
+}
 
 let ai: GoogleGenAI | null = null;
 let geminiInitializationError: string | null = null;
 
-// FIX: Corrected API key placeholder check and initialization based on guidelines
-const API_KEY_PLACEHOLDER_GENERIC = "YOUR_GEMINI_API_KEY"; // A generic placeholder
-if (apiKeyFromEnv && apiKeyFromEnv !== API_KEY_PLACEHOLDER_GENERIC && apiKeyFromEnv.trim() !== "" && apiKeyFromEnv.length > 10) { // Basic sanity check
+if (apiKeyFromEnv && apiKeyFromEnv !== API_KEY_PLACEHOLDER && apiKeyFromEnv.trim() !== "" && apiKeyFromEnv.length > 10) { // Basic sanity check
   try {
-    // FIX: Initialize with {apiKey: process.env.API_KEY}
     ai = new GoogleGenAI({ apiKey: apiKeyFromEnv });
-    console.info("Gemini AI Service: Initialized.");
+    console.info("Gemini AI Service: Initialized with client-side API key for demo/dev purposes.");
+    console.warn("Gemini AI Service: IMPORTANT - Using a client-side API key is insecure for production. Protect your API key by using a backend proxy.");
   } catch (error) {
-    console.error("Gemini AI Service: Failed to initialize GoogleGenAI:", error);
+    console.error("Gemini AI Service: Failed to initialize GoogleGenAI with client-side key:", error);
     geminiInitializationError = error instanceof Error ? error.message : "Unknown initialization error.";
     ai = null;
   }
 } else {
   let warningMessage = "Gemini AI Service: AI features will be disabled or limited. ";
   if (!apiKeyFromEnv) {
-    warningMessage += "API_KEY environment variable is not set.";
-  } else if (apiKeyFromEnv === API_KEY_PLACEHOLDER_GENERIC || apiKeyFromEnv.trim() === "" || apiKeyFromEnv.length <=10) {
-    warningMessage += "API_KEY is a placeholder, empty, or too short.";
+    warningMessage += "API key not found (window.process.env.API_KEY is undefined or was removed from index.html).";
+  } else if (apiKeyFromEnv === API_KEY_PLACEHOLDER || apiKeyFromEnv.trim() === "" || apiKeyFromEnv.length <=10) {
+    warningMessage += "API key is a placeholder, empty, or too short.";
   }
-  warningMessage += " For full functionality, ensure a valid API_KEY is available in process.env.API_KEY.";
+  warningMessage += " For full functionality in development, provide a valid key in index.html. For production, always use a backend proxy.";
   console.warn(warningMessage);
-  geminiInitializationError = warningMessage; 
+  geminiInitializationError = warningMessage; // Store the warning as an error if no init
   ai = null;
 }
 
 export const generateQuizQuestionsWithGemini = async (topic: string, numberOfQuestions: number = 3): Promise<QuizQuestion[]> => {
   if (!ai) {
     const defaultError = "Gemini API client is not initialized.";
-    throw new Error(geminiInitializationError || defaultError + " Ensure the API_KEY is correctly configured.");
+    throw new Error(geminiInitializationError || defaultError + " Ensure the API_KEY is correctly configured (ideally via a backend proxy for production).");
   }
 
   const prompt = `
@@ -77,26 +78,21 @@ export const generateQuizQuestionsWithGemini = async (topic: string, numberOfQue
         throw new Error("Invalid JSON structure received from AI.");
     }
 
-    // FIX: Changed string ID to a temporary numeric ID and added orderIndex
     return generatedData.map((gq, index) => ({
-      // FIX: Use temporary numeric ID (negative to distinguish from DB IDs)
-      id: -(Date.now() + index), 
+      id: `ai_q_${Date.now()}_${index}`,
       text: gq.text,
       options: gq.options.map((optText, optIndex) => ({
-        // FIX: Use temporary numeric ID for options
-        id: -(Date.now() + index * 1000 + optIndex + 100), // Make distinct from question ID and other option IDs
+        id: `ai_opt_${Date.now()}_${index}_${optIndex}`,
         text: optText,
         isCorrect: optIndex === gq.correctAnswerIndex,
       })),
       type: 'mcq',
-      // FIX: Add orderIndex as it's part of QuizQuestion type (optional)
-      orderIndex: index,
     }));
 
   } catch (error) {
     console.error("Error generating quiz questions with Gemini:", error);
     if (error instanceof Error && (error.message.includes("API key not valid") || error.message.includes("permission denied"))) {
-        throw new Error("Invalid or unauthorized Gemini API Key. Please check your configuration.");
+        throw new Error("Invalid or unauthorized Gemini API Key. Please check your configuration. For production, use a backend proxy.");
     }
     throw new Error(`Failed to generate questions: ${error instanceof Error ? error.message : String(error)}`);
   }

@@ -34,19 +34,15 @@ const LiveSessionPage: React.FC = () => {
   useEffect(() => { micMutedRef.current = isMicMuted; }, [isMicMuted]);
 
   const fetchCourseDetails = useCallback(async () => {
-    // FIX: Parse courseId (string | undefined) to number for apiService call
-    const numericCourseId = courseId ? parseInt(courseId, 10) : null;
-
-    if (!numericCourseId || isNaN(numericCourseId) || !isAuthenticated || !user) {
-      setMediaError("Course ID is invalid or user information is missing.");
+    if (!courseId || !isAuthenticated || !user) {
+      setMediaError("Course or user information is missing.");
       setInitialLoading(false);
       return;
     }
     setInitialLoading(true);
     setMediaError(null);
     try {
-      // FIX: Use parsed numericCourseId
-      const fetchedCourse = await apiService.getCourseById(numericCourseId);
+      const fetchedCourse = await apiService.getCourseById(courseId);
       if (!fetchedCourse) setMediaError("Course not found.");
       else setCourse(fetchedCourse);
     } catch (e) {

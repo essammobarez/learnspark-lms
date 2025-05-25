@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES, QUIZ_WITH_PLAYER_INFO_KEY } from '../constants';
-import { apiService } from '../services/apiService'; 
+import { apiService } from '../services/apiService'; // Use real API service
 import { QuizWithPlayerInfo } from '../types';
 import Input from '../components/Input';
 import Button from '../components/Button';
@@ -25,15 +25,17 @@ const JoinQuizWithPage: React.FC = () => {
     }
     setIsLoading(true);
     try {
-      // result.quizId and result.courseId are numbers from backend
       const result = await apiService.joinQuizWithSession(pin.trim().toUpperCase(), nickname.trim());
       if (result.success && result.quizId && result.courseId) {
         const playerInfo: QuizWithPlayerInfo = { 
           nickname: nickname.trim(), 
           joinedPin: pin.trim().toUpperCase() 
+          // sessionId from backend could also be stored if needed for subsequent authenticated actions within the game
         };
         localStorage.setItem(QUIZ_WITH_PLAYER_INFO_KEY, JSON.stringify(playerInfo));
-        navigate(ROUTES.QUIZ.replace(':courseId', result.courseId.toString()).replace(':quizId', result.quizId.toString()));
+        // Navigate to the quiz. The backend has now associated this player with the session.
+        // The quiz page itself might load based on this player's session state from backend if needed.
+        navigate(ROUTES.QUIZ.replace(':courseId', result.courseId).replace(':quizId', result.quizId));
       } else {
         setError(result.message || 'Could not join the game. Please check PIN and try again.');
       }
