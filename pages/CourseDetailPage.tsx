@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Course, Lesson, Quiz, UserRole } from '../types';
-import { apiService } from '../services/apiService'; // Use real API service
+import { apiService } from '../services/apiService';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Button from '../components/Button';
 import { useAuth } from '../hooks/useAuth';
@@ -11,7 +11,7 @@ import { PlayCircleIcon, DocumentTextIcon, PresentationChartBarIcon, PuzzlePiece
 import { AcademicCapIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
 const CourseDetailPage: React.FC = () => {
-  const { courseId } = useParams<{ courseId: string }>();
+  const { courseId: courseIdParam } = useParams<{ courseId: string }>();
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -22,9 +22,11 @@ const CourseDetailPage: React.FC = () => {
   const [enrollLoading, setEnrollLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const courseId = courseIdParam ? parseInt(courseIdParam, 10) : null;
+
   const fetchCourseData = useCallback(async () => {
-    if (!courseId) {
-      setError("Course ID not provided.");
+    if (!courseId || isNaN(courseId)) {
+      setError("Invalid Course ID provided.");
       setIsLoading(false);
       return;
     }
@@ -35,14 +37,11 @@ const CourseDetailPage: React.FC = () => {
       setCourse(fetchedCourse);
 
       if (fetchedCourse) {
-        // Fetch quizzes associated with the course
         const fetchedQuizzes = await apiService.getQuizzesForCourse(courseId);
         setQuizzes(fetchedQuizzes || []);
 
-        // Check enrollment status if user is logged in
-        if (user && isAuthenticated) {
-          const enrolledCourses = await apiService.getEnrolledCourses();
-          setIsEnrolled(enrolledCourses.some(c => c.id === fetchedCourse.id));
+        if (user && isAuthenticated && user.enrolledCourseIds) { // user.id is number
+          setIsEnrolled(user.enrolledCourseIds.includes(fetchedCourse.id));
         } else {
           setIsEnrolled(false);
         }
@@ -70,7 +69,10 @@ const CourseDetailPage: React.FC = () => {
       const result = await apiService.enrollInCourse(courseId);
       if (result.success) {
         setIsEnrolled(true);
-        // Optionally, re-fetch course data to update enrollment count or rely on optimistic update
+        // Optimistically update enrolled courses for current user or re-fetch user
+        if (user && user.enrolledCourseIds) {
+            user.enrolledCourseIds.push(courseId);
+        }
         setCourse(prevCourse => prevCourse ? {...prevCourse, enrollmentCount: (prevCourse.enrollmentCount || 0) + 1} : null);
       } else {
         setError(result.message || "Enrollment failed. Please try again.");
@@ -96,7 +98,7 @@ const CourseDetailPage: React.FC = () => {
     return <div className="flex flex-col items-center justify-center py-10"><LoadingSpinner /><p className="mt-3 text-gray-600 dark:text-gray-400">Loading course details...</p></div>;
   }
 
-  if (error && !course) { // Changed condition to show error only if course is not loaded
+  if (error && !course) { 
     return (
       <div className="text-center py-10 bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md transition-colors duration-300 ease-in-out">
         <ExclamationTriangleIcon className="mx-auto h-16 w-16 text-red-500 dark:text-red-400 mb-4" />
@@ -111,7 +113,7 @@ const CourseDetailPage: React.FC = () => {
     );
   }
   
-  if (!course) { // Fallback if no error but course is still null
+  if (!course) { 
      return (
       <div className="text-center py-10">
         <ExclamationTriangleIcon className="mx-auto h-12 w-12 text-yellow-500" />
@@ -120,7 +122,6 @@ const CourseDetailPage: React.FC = () => {
       </div>
     );
   }
-
 
   const isInstructorOwner = isAuthenticated && user?.role === UserRole.INSTRUCTOR && user.id === course.instructorId;
 
@@ -140,12 +141,12 @@ const CourseDetailPage: React.FC = () => {
            <div className="mt-6 flex flex-wrap gap-3">
             {isInstructorOwner && (
               <>
-                <Link to={ROUTES.LIVE_SESSION.replace(':courseId', course.id)}>
+                <Link to={ROUTES.LIVE_SESSION.replace(':courseId', course.id.toString())}>
                   <Button variant="primary" size="md" className="flex items-center">
                     <VideoCameraIcon className="w-5 h-5 mr-2" /> Start Live Session
                   </Button>
                 </Link>
-                <Link to={ROUTES.EDIT_COURSE.replace(':courseId', course.id)}>
+                <Link to={ROUTES.EDIT_COURSE.replace(':courseId', course.id.toString())}>
                   <Button variant="secondary" size="md" className="flex items-center">
                     <PencilSquareIcon className="w-5 h-5 mr-2" /> Edit Course
                   </Button>
@@ -153,7 +154,7 @@ const CourseDetailPage: React.FC = () => {
               </>
             )}
             {isAuthenticated && user?.role === UserRole.STUDENT && isEnrolled && (
-               <Link to={ROUTES.LIVE_SESSION.replace(':courseId', course.id)}>
+               <Link to={ROUTES.LIVE_SESSION.replace(':courseId', course.id.toString())}>
                 <Button variant="success" size="md" className="flex items-center">
                   <UserGroupIcon className="w-5 h-5 mr-2" /> Join Live Session
                 </Button>
@@ -198,12 +199,12 @@ const CourseDetailPage: React.FC = () => {
                       </div>
                       <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
                           {(isEnrolled || isInstructorOwner) && quiz.questions && quiz.questions.length > 0 && (
-                              <Link to={ROUTES.QUIZ.replace(':courseId', course.id).replace(':quizId', quiz.id)} className="w-full sm:w-auto">
+                              <Link to={ROUTES.QUIZ.replace(':courseId', course.id.toString()).replace(':quizId', quiz.id.toString())} className="w-full sm:w-auto">
                               <Button variant="secondary" size="sm" className="w-full">Start Quiz</Button>
                               </Link>
                           )}
                           {isInstructorOwner && quiz.questions && quiz.questions.length > 0 && (
-                              <Link to={ROUTES.HOST_QUIZ_SESSION.replace(':courseId', course.id).replace(':quizId', quiz.id)} className="w-full sm:w-auto">
+                              <Link to={ROUTES.HOST_QUIZ_SESSION.replace(':courseId', course.id.toString()).replace(':quizId', quiz.id.toString())} className="w-full sm:w-auto">
                                   <Button variant="primary" size="sm" className="w-full flex items-center justify-center">
                                       <PresentationChartLineIcon className="w-4 h-4 mr-1" /> Host QuizWith
                                   </Button>
@@ -220,7 +221,7 @@ const CourseDetailPage: React.FC = () => {
             )}
             {isInstructorOwner && (
               <div className="mt-8 border-t border-gray-200 dark:border-gray-700 pt-6">
-                <Link to={ROUTES.CREATE_QUIZ.replace(':courseId', course.id)}>
+                <Link to={ROUTES.CREATE_QUIZ.replace(':courseId', course.id.toString())}>
                   <Button variant="success" size="sm" className="flex items-center">
                     <PlusCircleIcon className="w-5 h-5 mr-2" /> Add New Quiz
                   </Button>

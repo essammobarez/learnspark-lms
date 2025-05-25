@@ -46,7 +46,10 @@ const InstructorReportsPage: React.FC = () => {
     fetchInitialData();
   }, [fetchInitialData]);
 
-  const filteredAttempts = selectedQuizId === 'all' ? quizAttempts : quizAttempts.filter(attempt => attempt.quizId === selectedQuizId);
+  // FIX: Parse selectedQuizId (string) to number for comparison, unless it's 'all'
+  const filteredAttempts = selectedQuizId === 'all' 
+    ? quizAttempts 
+    : quizAttempts.filter(attempt => attempt.quizId === parseInt(selectedQuizId, 10));
 
   if (isLoading) {
     return ( <div className="text-center py-10"><LoadingSpinner /> <p className="mt-3 text-gray-600 dark:text-gray-400">Loading quiz reports...</p></div> );
@@ -90,7 +93,7 @@ const InstructorReportsPage: React.FC = () => {
           <select id="quizFilter" name="quizFilter" value={selectedQuizId} onChange={(e) => setSelectedQuizId(e.target.value)}
             className="mt-1 block w-full sm:w-auto pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-indigo-500 dark:focus:border-indigo-400 sm:text-sm rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
             <option value="all">All My Quizzes</option>
-            {instructorQuizzes.map(quiz => ( <option key={quiz.id} value={quiz.id}>{quiz.title}</option> ))}
+            {instructorQuizzes.map(quiz => ( <option key={quiz.id} value={quiz.id.toString()}>{quiz.title}</option> ))}
           </select>
         </div>
       )}
@@ -115,7 +118,7 @@ const InstructorReportsPage: React.FC = () => {
                   <tr key={attempt.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{attempt.courseTitle}</td>
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{attempt.quizTitle}</td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{attempt.playerNickname || attempt.userId || 'N/A'}</td>
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{attempt.playerNickname || (attempt.userId ? `User ID: ${attempt.userId}`: 'Anonymous')}</td>
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300"> {attempt.score} / {attempt.totalQuestions} </td>
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
                        <span className={`px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${

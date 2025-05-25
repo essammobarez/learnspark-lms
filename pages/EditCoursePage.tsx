@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { apiService } from '../services/apiService'; // Use real API service
+import { apiService } from '../services/apiService';
 import { ROUTES } from '../constants';
 import Input from '../components/Input';
 import Button from '../components/Button';
@@ -12,9 +12,10 @@ import { PlusIcon, TrashIcon, ExclamationTriangleIcon, ArrowUturnLeftIcon } from
 
 
 const EditCoursePage: React.FC = () => {
-  const { user, isAuthenticated } = useAuth();
-  const { courseId } = useParams<{ courseId: string }>();
+  const { user, isAuthenticated } = useAuth(); // user.id is number
+  const { courseId: courseIdParam } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
+  const courseId = courseIdParam ? parseInt(courseIdParam, 10) : null;
 
   const [course, setCourse] = useState<Course | null>(null);
   const [title, setTitle] = useState('');
@@ -26,14 +27,15 @@ const EditCoursePage: React.FC = () => {
   const [currentLessonTitle, setCurrentLessonTitle] = useState('');
   const [currentLessonType, setCurrentLessonType] = useState<'video' | 'document' | 'presentation'>('video');
   const [currentLessonContent, setCurrentLessonContent] = useState('');
+  // const [currentLessonOrderIndex, setCurrentLessonOrderIndex] = useState(0); // For new lessons
 
   const [isLoading, setIsLoading] = useState(true); 
   const [isSubmitting, setIsSubmitting] = useState(false); 
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!courseId) {
-      setError('Course ID not provided.');
+    if (!courseId || isNaN(courseId)) {
+      setError('Course ID not provided or invalid.');
       setIsLoading(false);
       navigate(ROUTES.INSTRUCTOR_DASHBOARD);
       return;
@@ -55,9 +57,10 @@ const EditCoursePage: React.FC = () => {
           setCategory(fetchedCourse.category);
           setImageUrl(fetchedCourse.imageUrl);
           setLessons(fetchedCourse.lessons || []);
+          // setCurrentLessonOrderIndex(fetchedCourse.lessons?.length || 0);
         } else if (fetchedCourse) {
           setError('You are not authorized to edit this course.');
-          setCourse(null); // Prevent editing if not owner
+          setCourse(null);
         } else {
           setError('Course not found.');
         }
@@ -77,20 +80,26 @@ const EditCoursePage: React.FC = () => {
       return;
     }
     setError("");
+    // New lessons don't have a DB ID yet. The backend will assign one.
+    // A temporary client-side ID can be used for list rendering if needed, e.g., Date.now()
+    // Or, the backend can return the full lesson object with its new ID.
+    // For this structure, we send lessons without IDs if they are new.
     const newLesson: Lesson = {
-      // Backend should assign final ID, client can use temp or undefined
-      id: `new_lesson_${Date.now()}`, // Or let backend assign ID
+      id: -Date.now(), // Negative temp ID for new, non-DB items for local list key
       title: currentLessonTitle.trim(),
       type: currentLessonType,
       content: currentLessonContent.trim(),
+      orderIndex: lessons.length, // New lessons are added at the end
     };
     setLessons([...lessons, newLesson]);
     setCurrentLessonTitle('');
     setCurrentLessonContent('');
+    // setCurrentLessonOrderIndex(lessons.length + 1);
   };
 
-  const handleRemoveLesson = (lessonIdToRemove: string) => {
-    setLessons(lessons.filter(lesson => lesson.id !== lessonIdToRemove));
+  const handleRemoveLesson = (lessonIdToRemove: number) => {
+    setLessons(lessons.filter(lesson => lesson.id !== lessonIdToRemove).map((l, i) => ({...l, orderIndex:i})));
+    // setCurrentLessonOrderIndex(lessons.length -1);
   };
 
 
@@ -112,16 +121,26 @@ const EditCoursePage: React.FC = () => {
     setIsSubmitting(true);
     setError('');
     try {
-      const courseUpdateData: Partial<Omit<Course, 'id' | 'instructorId' | 'instructorName' | 'rating' | 'enrollmentCount'>> = {
+      // Prepare lessons: existing lessons keep their IDs, new ones might not have one or have temp ID
+      // Backend should handle creating new lessons if ID is missing/temp and updating existing ones.
+      const lessonsToSend = lessons.map((l, index) => ({
+        id: l.id > 0 ? l.id : undefined, // Send ID only if it's a persisted one
+        title: l.title,
+        type: l.type,
+        content: l.content,
+        orderIndex: l.orderIndex !== undefined ? l.orderIndex : index,
+      }));
+
+      const courseUpdateData: Partial<Omit<Course, 'id' | 'instructorId' | 'instructorName' | 'rating' | 'enrollmentCount' | 'quizIds' | 'createdAt' | 'updatedAt'>> = {
         title, description, category,
         imageUrl: imageUrl || `https://picsum.photos/seed/${title.replace(/\s+/g, '-')}/600/400`,
-        lessons: lessons, 
+        lessons: lessonsToSend as any, // Cast as backend expects array of Lesson-like objects
       };
       
       const updatedCourse = await apiService.updateCourse(courseId, courseUpdateData);
       setIsSubmitting(false);
       if (updatedCourse) {
-        navigate(ROUTES.COURSE_DETAIL.replace(':courseId', updatedCourse.id));
+        navigate(ROUTES.COURSE_DETAIL.replace(':courseId', updatedCourse.id.toString()));
       } else {
         setError('Failed to update course. Please try again.');
       }
@@ -136,7 +155,7 @@ const EditCoursePage: React.FC = () => {
     return <div className="container mx-auto p-6 text-center"><LoadingSpinner /><p className="dark:text-gray-300 mt-2">Loading course for editing...</p></div>;
   }
 
-  if (error && !course && !isLoading) { // Show error if course couldn't be loaded and not loading anymore
+  if (error && !course && !isLoading) { 
     return (
       <div className="container mx-auto p-6 text-center">
         <ExclamationTriangleIcon className="w-12 h-12 text-red-500 mx-auto mb-3" />
@@ -148,11 +167,11 @@ const EditCoursePage: React.FC = () => {
     );
   }
   
-  if (!course && !isLoading) { // Fallback if no error but course is null after loading
+  if (!course && !isLoading) { 
     return <div className="container mx-auto p-6 text-center text-gray-600 dark:text-gray-300">Could not find the course to edit.</div>;
   }
   
-  if (course && user && course.instructorId !== user.id && !isLoading) { // Explicit check for authorization after loading
+  if (course && user && course.instructorId !== user.id && !isLoading) { 
      return (
       <div className="container mx-auto p-6 text-center">
         <ExclamationTriangleIcon className="w-12 h-12 text-red-500 mx-auto mb-3" />
@@ -168,7 +187,7 @@ const EditCoursePage: React.FC = () => {
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-center">
         <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white">Edit Course: <span className="text-blue-600 dark:text-blue-400">{course?.title}</span></h1>
-         <Button variant="secondary" onClick={() => navigate(ROUTES.COURSE_DETAIL.replace(':courseId', courseId || ''))} disabled={isSubmitting}>
+         <Button variant="secondary" onClick={() => navigate(ROUTES.COURSE_DETAIL.replace(':courseId', courseId?.toString() || ''))} disabled={isSubmitting}>
             <ArrowUturnLeftIcon className="w-5 h-5 mr-2"/> Cancel Editing
         </Button>
       </div>
@@ -194,9 +213,9 @@ const EditCoursePage: React.FC = () => {
             <div className="mb-6 space-y-3">
                 <h3 className="text-md font-medium text-gray-700 dark:text-gray-300">Current Lessons ({lessons.length}):</h3>
                  <ul className="border border-gray-200 dark:border-gray-600 rounded-md shadow-sm divide-y divide-gray-200 dark:divide-gray-600">
-                    {lessons.map((l) => (
-                        <li key={l.id} className="px-4 py-3 flex justify-between items-center text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                            <span className="text-gray-800 dark:text-gray-200">{l.title} <span className="text-xs text-gray-500 dark:text-gray-400">({l.type})</span></span>
+                    {lessons.map((l, index) => ( // Use index for key if ID can be temporary negative
+                        <li key={l.id > 0 ? l.id : `temp-lesson-${index}`} className="px-4 py-3 flex justify-between items-center text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                            <span className="text-gray-800 dark:text-gray-200">{l.orderIndex !== undefined ? l.orderIndex + 1 : index + 1}. {l.title} <span className="text-xs text-gray-500 dark:text-gray-400">({l.type})</span></span>
                             <Button type="button" variant="danger" size="sm" onClick={() => handleRemoveLesson(l.id)} aria-label="Remove lesson">
                                <TrashIcon className="w-4 h-4"/>
                             </Button>
