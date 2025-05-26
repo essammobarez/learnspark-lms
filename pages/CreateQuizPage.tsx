@@ -139,6 +139,7 @@ const CreateQuizPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       const quizData: Omit<Quiz, 'id'> = { title: title.trim(), questions, courseId };
+      // FIX: Property 'createQuiz' now exists on apiService
       const newQuiz = await apiService.createQuiz(quizData);
       setCreationResult({ success: true, message: `Quiz "${newQuiz.title}" created successfully!`, quizId: newQuiz.id, quizTitle: newQuiz.title, courseId: newQuiz.courseId });
       setTitle(''); setQuestions([]); setAiTopic('');
@@ -152,14 +153,14 @@ const CreateQuizPage: React.FC = () => {
   };
 
   if (pageLoading) {
-    return <div className="container mx-auto px-4 py-8 text-center"><LoadingSpinner /><p className="dark:text-gray-300 mt-2">Loading course information...</p></div>;
+    return <div className="container mx-auto px-4 py-8 text-center"><LoadingSpinner /><p className="text-gray-600 mt-2">Loading course information...</p></div>;
   }
   
   if (!course && !pageLoading) { 
       return (
         <div className="container mx-auto px-4 py-8 text-center">
-            <ExclamationTriangleIcon className="w-12 h-12 text-red-500 dark:text-red-400 mx-auto mb-4" />
-            <p className="text-xl text-red-600 dark:text-red-400">{formError || "Course not found or access denied."}</p>
+            <ExclamationTriangleIcon className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <p className="text-xl text-red-600">{formError || "Course not found or access denied."}</p>
             <Link to={ROUTES.INSTRUCTOR_DASHBOARD}> <Button variant="primary" className="mt-6">Back to Dashboard</Button> </Link>
         </div> );
   }
@@ -168,9 +169,9 @@ const CreateQuizPage: React.FC = () => {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
         {creationResult.success ? 
-          <CheckCircleIcon className="w-16 h-16 text-green-500 dark:text-green-400 mx-auto mb-4" /> : 
-          <ExclamationTriangleIcon className="w-16 h-16 text-red-500 dark:text-red-400 mx-auto mb-4" />}
-        <h2 className={`text-2xl font-semibold mb-4 ${creationResult.success ? 'text-gray-800 dark:text-white' : 'text-red-600 dark:text-red-400'}`}>
+          <CheckCircleIcon className="w-16 h-16 text-green-500 mx-auto mb-4" /> : 
+          <ExclamationTriangleIcon className="w-16 h-16 text-red-500 mx-auto mb-4" />}
+        <h2 className={`text-2xl font-semibold mb-4 ${creationResult.success ? 'text-gray-800' : 'text-red-600'}`}>
           {creationResult.message}
         </h2>
         {creationResult.success && creationResult.quizId && creationResult.courseId && creationResult.quizTitle && (
@@ -191,48 +192,48 @@ const CreateQuizPage: React.FC = () => {
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-center">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2 sm:mb-0">
-            Create New Quiz for <Link to={ROUTES.COURSE_DETAIL.replace(':courseId', course!.id)} className="text-blue-600 dark:text-blue-400 hover:underline">{course?.title}</Link>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 sm:mb-0">
+            Create New Quiz for <Link to={ROUTES.COURSE_DETAIL.replace(':courseId', course!.id)} className="text-blue-600 hover:underline">{course?.title}</Link>
         </h1>
         <Button variant="outline" onClick={() => navigate(ROUTES.COURSE_DETAIL.replace(':courseId', course!.id))}>
             <ArrowUturnLeftIcon className="w-5 h-5 mr-2"/> Back to Course
         </Button>
       </div>
-      <p className="text-sm text-gray-600 dark:text-gray-400 -mt-6">Add questions manually or use AI to generate them.</p>
+      <p className="text-sm text-gray-600 -mt-6">Add questions manually or use AI to generate them.</p>
       
-      <form onSubmit={handleSubmitQuiz} className="bg-white dark:bg-gray-800 p-4 sm:p-8 rounded-xl shadow-2xl space-y-8 transition-colors duration-300 ease-in-out">
+      <form onSubmit={handleSubmitQuiz} className="bg-white p-4 sm:p-8 rounded-xl shadow-2xl space-y-8 transition-colors duration-300 ease-in-out">
         <Input label="Quiz Title" value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="e.g., Chapter 1 Review" />
 
         {geminiReady && (
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-            <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-1">Generate Questions with AI ✨</h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Powered by Gemini. Be specific for best results.</p>
-            <div className="p-4 border border-blue-200 dark:border-blue-700 rounded-lg bg-blue-50 dark:bg-gray-700/50 space-y-3">
+          <div className="border-t border-gray-200 pt-6">
+            <h2 className="text-xl font-semibold text-gray-700 mb-1">Generate Questions with AI ✨</h2>
+            <p className="text-xs text-gray-500 mb-3">Powered by Gemini. Be specific for best results.</p>
+            <div className="p-4 border border-blue-200 rounded-lg bg-blue-50 space-y-3">
               <Input label="Topic for AI Questions" value={aiTopic} onChange={(e) => setAiTopic(e.target.value)} placeholder="e.g., Key Concepts of Photosynthesis" />
               <Button type="button" onClick={handleGenerateWithAI} disabled={isGeneratingWithAI || !aiTopic.trim()} variant="secondary" className="flex items-center">
                 {isGeneratingWithAI ? <LoadingSpinner /> : <SparklesIcon className="w-5 h-5 mr-2"/>} Generate 3 Questions
               </Button>
-              {aiError && <p className="text-red-500 dark:text-red-400 text-sm mt-2">{aiError}</p>}
+              {aiError && <p className="text-red-500 text-sm mt-2">{aiError}</p>}
             </div>
           </div>
         )}
         {!geminiReady && (
-            <div className="p-3 bg-yellow-50 dark:bg-yellow-700/30 border border-yellow-300 dark:border-yellow-600 rounded-md text-sm text-yellow-700 dark:text-yellow-300">
-                <ExclamationTriangleIcon className="w-5 h-5 inline mr-2 text-yellow-600 dark:text-yellow-400" />
+            <div className="p-3 bg-yellow-50 border border-yellow-300 rounded-md text-sm text-yellow-700">
+                <ExclamationTriangleIcon className="w-5 h-5 inline mr-2 text-yellow-600" />
                 AI question generation unavailable. Check API key configuration. Manual addition is still active.
             </div>
         )}
 
-        <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-            <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Add Question Manually</h2>
-            <div className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/50 space-y-4">
+        <div className="border-t border-gray-200 pt-6">
+            <h2 className="text-xl font-semibold text-gray-700 mb-3">Add Question Manually</h2>
+            <div className="p-4 border border-gray-200 rounded-lg bg-gray-50 space-y-4">
                 <Input label="Question Text" value={currentQuestionText} onChange={(e) => setCurrentQuestionText(e.target.value)} placeholder="Enter the question here" />
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Options (Mark correct answer)</label>
+                <label className="block text-sm font-medium text-gray-700">Options (Mark correct answer)</label>
                 {currentOptions.map((opt, index) => (
                     <div key={index} className="flex items-center space-x-2">
                         <Input type="text" placeholder={`Option ${index + 1}`} value={opt.text || ''} onChange={(e) => handleOptionTextChange(index, e.target.value)} className="flex-grow" />
-                        <input type="radio" id={`correct_opt_create_${index}`} name="correctOptionCreate" checked={correctOptionIndex === index} onChange={() => setCorrectOptionIndex(index)} className="form-radio h-5 w-5 text-blue-600 dark:text-blue-400 focus:ring-blue-500 dark:focus:ring-blue-400 border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-600" />
-                         <label htmlFor={`correct_opt_create_${index}`} className="text-sm text-gray-600 dark:text-gray-300 select-none">Correct</label>
+                        <input type="radio" id={`correct_opt_create_${index}`} name="correctOptionCreate" checked={correctOptionIndex === index} onChange={() => setCorrectOptionIndex(index)} className="form-radio h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 bg-white" />
+                         <label htmlFor={`correct_opt_create_${index}`} className="text-sm text-gray-600 select-none">Correct</label>
                         {currentOptions.length > 2 && <Button type="button" variant="danger" size="sm" onClick={() => handleRemoveOptionField(index)} aria-label="Remove option"><TrashIcon className="w-4 h-4" /></Button>}
                     </div>
                 ))}
@@ -244,17 +245,17 @@ const CreateQuizPage: React.FC = () => {
         </div>
 
         {questions.length > 0 && (
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-2">Current Quiz Questions ({questions.length}):</h3>
+          <div className="border-t border-gray-200 pt-6">
+            <h3 className="text-lg font-semibold text-gray-700 mb-2">Current Quiz Questions ({questions.length}):</h3>
             <ul className="space-y-3">
               {questions.map((q, index) => (
-                <li key={q.id} className="p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 shadow-sm hover:shadow-md dark:hover:bg-gray-700/70 transition-all duration-200">
+                <li key={q.id} className="p-3 border border-gray-200 rounded-lg bg-white shadow-sm hover:shadow-md transition-all duration-200">
                   <div className="flex justify-between items-start">
-                    <p className="font-medium text-gray-800 dark:text-gray-100 text-sm flex-1 pr-2">{index + 1}. {q.text}</p>
+                    <p className="font-medium text-gray-800 text-sm flex-1 pr-2">{index + 1}. {q.text}</p>
                     <Button type="button" variant="danger" size="sm" onClick={() => handleRemoveQuestion(q.id)} aria-label="Remove question"><TrashIcon className="w-4 h-4"/></Button>
                   </div>
-                  <ul className="list-disc list-inside ml-4 mt-1 text-xs text-gray-600 dark:text-gray-400">
-                    {q.options.map(opt => ( <li key={opt.id} className={opt.isCorrect ? 'text-green-600 dark:text-green-400 font-semibold' : ''}> {opt.text} {opt.isCorrect && <CheckCircleIcon className="w-3 h-3 inline ml-1 text-green-500 dark:text-green-400" />}</li> ))}
+                  <ul className="list-disc list-inside ml-4 mt-1 text-xs text-gray-600">
+                    {q.options.map(opt => ( <li key={opt.id} className={opt.isCorrect ? 'text-green-600 font-semibold' : ''}> {opt.text} {opt.isCorrect && <CheckCircleIcon className="w-3 h-3 inline ml-1 text-green-500" />}</li> ))}
                   </ul>
                 </li>
               ))}
@@ -262,9 +263,9 @@ const CreateQuizPage: React.FC = () => {
           </div>
         )}
 
-        {formError && <p className="text-red-600 dark:text-red-400 text-sm text-center bg-red-50 dark:bg-red-900/30 p-3 rounded-md">{formError}</p>}
+        {formError && <p className="text-red-600 text-sm text-center bg-red-50 p-3 rounded-md">{formError}</p>}
         
-        <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+        <div className="border-t border-gray-200 pt-6">
             <Button type="submit" variant="success" className="w-full text-lg py-3" disabled={isSubmitting || questions.length === 0}>
             {isSubmitting ? <LoadingSpinner /> : 'Create Quiz'}
             </Button>

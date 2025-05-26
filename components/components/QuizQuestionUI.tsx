@@ -1,6 +1,7 @@
 
+
 import React from 'react';
-import { QuizQuestion, QuizQuestionOption } from '../types';
+import { QuizQuestion, QuizQuestionOption } from '../../types';
 // Button component is not used here to maintain unique Kahoot styling
 
 // Option colors for light mode
@@ -12,10 +13,11 @@ const lightOptionColors = [
 ];
 
 // Option colors for dark mode (adjust for better contrast if needed)
+// These dark specific classes will no longer apply as 'dark' class is removed from HTML
 const darkOptionColors = [
   'dark:bg-red-600 dark:hover:bg-red-700',
   'dark:bg-blue-600 dark:hover:bg-blue-700',
-  'dark:bg-yellow-500 dark:hover:bg-yellow-600', // Yellow might need to be darker/more orange in dark mode
+  'dark:bg-yellow-500 dark:hover:bg-yellow-600', 
   'dark:bg-green-600 dark:hover:bg-green-700',
 ];
 
@@ -29,17 +31,17 @@ const Shapes: React.FC<{ index: number, className?: string }>[] = [
 
 interface QuizQuestionUIProps {
   question: QuizQuestion;
-  // FIX: Changed onAnswerSelect to expect number for optionId
-  onAnswerSelect: (optionId: number) => void;
-  // FIX: Changed selectedOptionId to be number | undefined
-  selectedOptionId?: number;
+  // FIX: Changed onAnswerSelect to expect string for optionId, aligning with QuizQuestionOption.id type
+  onAnswerSelect: (optionId: string) => void;
+  // FIX: Changed selectedOptionId to be string | undefined, aligning with QuizQuestionOption.id type
+  selectedOptionId?: string;
   isAnswered?: boolean;
   isCorrect?: boolean;
 }
 
 const QuizQuestionUI: React.FC<QuizQuestionUIProps> = ({ question, onAnswerSelect, selectedOptionId, isAnswered, isCorrect }) => {
   return (
-    <div className="w-full max-w-3xl mx-auto p-4 sm:p-6 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg shadow-2xl transition-colors duration-300 ease-in-out">
+    <div className="w-full max-w-3xl mx-auto p-4 sm:p-6 bg-gray-100 text-gray-900 rounded-lg shadow-2xl transition-colors duration-300 ease-in-out">
       <h2 className="text-2xl sm:text-3xl font-bold text-center mb-6 sm:mb-8">{question.text}</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
         {question.options.map((option, index) => {
@@ -47,22 +49,23 @@ const QuizQuestionUI: React.FC<QuizQuestionUIProps> = ({ question, onAnswerSelec
           // Base classes, common for both modes before color specifics
           let baseButtonClass = `text-white font-bold py-4 sm:py-6 px-3 sm:px-4 rounded-lg text-lg sm:text-xl flex items-center justify-center transition-all duration-200 ease-in-out transform focus:outline-none focus:ring-4 focus:ring-opacity-50`;
           
+          // The darkOptionColors classes will not apply since 'dark' class is removed from <html>
           let colorClass = `${lightOptionColors[index % lightOptionColors.length]} ${darkOptionColors[index % darkOptionColors.length]}`;
-          let ringFocusClass = `focus:ring-gray-400 dark:focus:ring-gray-500`; // Default focus ring
+          let ringFocusClass = `focus:ring-gray-400`; // Default focus ring
 
           if (isAnswered) {
             if (option.isCorrect) {
-              colorClass = 'bg-green-600 dark:bg-green-500'; // Correct answer color
-              baseButtonClass += ' scale-105 ring-4 ring-white dark:ring-gray-300'; // Highlight correct
+              colorClass = 'bg-green-600'; // Correct answer color
+              baseButtonClass += ' scale-105 ring-4 ring-white'; // Highlight correct
               ringFocusClass = ''; // Ring already applied
-            // FIX: option.id (number) compared with selectedOptionId (number | undefined)
+            // FIX: option.id (string) compared with selectedOptionId (string | undefined)
             } else if (option.id === selectedOptionId && !option.isCorrect) {
-              colorClass = 'bg-red-700 dark:bg-red-600'; // Incorrect selected answer
-              baseButtonClass += ' opacity-70 dark:opacity-60';
-              ringFocusClass = `focus:ring-red-400 dark:focus:ring-red-500`;
+              colorClass = 'bg-red-700'; // Incorrect selected answer
+              baseButtonClass += ' opacity-70';
+              ringFocusClass = `focus:ring-red-400`;
             } else {
               // Other incorrect, unselected options
-              baseButtonClass += ' opacity-50 dark:opacity-40 cursor-not-allowed';
+              baseButtonClass += ' opacity-50 cursor-not-allowed';
             }
           } else {
              baseButtonClass += ` hover:scale-105`; // Hover effect for active buttons
@@ -71,7 +74,7 @@ const QuizQuestionUI: React.FC<QuizQuestionUIProps> = ({ question, onAnswerSelec
           return (
             <button
               key={option.id}
-              // FIX: onAnswerSelect expects number, option.id is number
+              // FIX: onAnswerSelect expects string, option.id is string
               onClick={() => !isAnswered && onAnswerSelect(option.id)}
               disabled={isAnswered}
               className={`${baseButtonClass} ${colorClass} ${ringFocusClass}`}
@@ -86,9 +89,9 @@ const QuizQuestionUI: React.FC<QuizQuestionUIProps> = ({ question, onAnswerSelec
       {isAnswered && (
         <div className="mt-6 sm:mt-8 text-center">
           {isCorrect ? (
-            <p className="text-3xl font-bold text-green-500 dark:text-green-400">Correct!</p>
+            <p className="text-3xl font-bold text-green-500">Correct!</p>
           ) : (
-            <p className="text-3xl font-bold text-red-600 dark:text-red-400">Incorrect!</p>
+            <p className="text-3xl font-bold text-red-600">Incorrect!</p>
           )}
         </div>
       )}

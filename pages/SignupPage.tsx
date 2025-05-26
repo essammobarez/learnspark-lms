@@ -54,15 +54,15 @@ const SignupPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gradient-to-br from-green-500 to-teal-600 dark:from-green-700 dark:to-teal-800 py-12 px-4 sm:px-6 lg:px-8 transition-all duration-300 ease-in-out">
-      <div className="max-w-md w-full space-y-8 bg-white dark:bg-gray-800 p-8 sm:p-10 rounded-xl shadow-2xl transition-colors duration-300 ease-in-out">
+    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gradient-to-br from-green-500 to-teal-600 py-12 px-4 sm:px-6 lg:px-8 transition-all duration-300 ease-in-out">
+      <div className="max-w-md w-full space-y-8 bg-white p-8 sm:p-10 rounded-xl shadow-2xl transition-colors duration-300 ease-in-out">
         <div>
-          <h2 className="text-center text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
+          <h2 className="text-center text-3xl font-bold tracking-tight text-gray-900">
             Create your {APP_NAME} Account
           </h2>
         </div>
         {successMessage && (
-          <div className="mt-4 p-3 bg-green-100 dark:bg-green-700/30 border border-green-300 dark:border-green-600 rounded-md text-green-700 dark:text-green-300 text-center text-sm">
+          <div className="mt-4 p-3 bg-green-100 border border-green-300 rounded-md text-green-700 text-center text-sm">
             {successMessage}
           </div>
         )}
@@ -111,7 +111,7 @@ const SignupPage: React.FC = () => {
           />
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">I want to sign up as a:</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">I want to sign up as a:</label>
             <div className="flex items-center space-x-4">
               <div className="flex items-center">
                 <input
@@ -121,9 +121,9 @@ const SignupPage: React.FC = () => {
                   value={UserRole.STUDENT}
                   checked={role === UserRole.STUDENT}
                   onChange={() => setRole(UserRole.STUDENT)}
-                  className="focus:ring-blue-500 dark:focus:ring-blue-400 h-4 w-4 text-blue-600 dark:text-blue-400 border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-600"
+                  className="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 bg-white"
                 />
-                <label htmlFor="role-student" className="ml-2 block text-sm text-gray-900 dark:text-gray-100">
+                <label htmlFor="role-student" className="ml-2 block text-sm text-gray-900">
                   Student
                 </label>
               </div>
@@ -135,16 +135,16 @@ const SignupPage: React.FC = () => {
                   value={UserRole.INSTRUCTOR}
                   checked={role === UserRole.INSTRUCTOR}
                   onChange={() => setRole(UserRole.INSTRUCTOR)}
-                  className="focus:ring-green-500 dark:focus:ring-green-400 h-4 w-4 text-green-600 dark:text-green-400 border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-600"
+                  className="focus:ring-green-500 h-4 w-4 text-green-600 border-gray-300 bg-white"
                 />
-                <label htmlFor="role-instructor" className="ml-2 block text-sm text-gray-900 dark:text-gray-100">
+                <label htmlFor="role-instructor" className="ml-2 block text-sm text-gray-900">
                   Instructor
                 </label>
               </div>
             </div>
           </div>
 
-          {error && <p className="text-sm text-red-600 dark:text-red-400 text-center bg-red-50 dark:bg-red-900/30 p-2 rounded-md">{error}</p>}
+          {error && <p className="text-sm text-red-600 text-center bg-red-50 p-2 rounded-md">{error}</p>}
           
           <div>
             <Button type="submit" variant="primary" className="w-full flex justify-center py-3 text-lg" disabled={isSubmitting}>
@@ -152,9 +152,9 @@ const SignupPage: React.FC = () => {
             </Button>
           </div>
         </form>
-        <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
+        <p className="mt-6 text-center text-sm text-gray-600">
           Already have an account?{' '}
-          <Link to={ROUTES.LOGIN} className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300">
+          <Link to={ROUTES.LOGIN} className="font-medium text-blue-600 hover:text-blue-500">
             Sign in
           </Link>
         </p>

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES, QUIZ_WITH_PLAYER_INFO_KEY } from '../constants';
-import { apiService } from '../services/apiService'; // Use real API service
+import { apiService } from '../services/apiService'; 
 import { QuizWithPlayerInfo } from '../types';
 import Input from '../components/Input';
 import Button from '../components/Button';
@@ -25,17 +25,26 @@ const JoinQuizWithPage: React.FC = () => {
     }
     setIsLoading(true);
     try {
+      // FIX: Property 'joinQuizWithSession' now exists on apiService
       const result = await apiService.joinQuizWithSession(pin.trim().toUpperCase(), nickname.trim());
-      if (result.success && result.quizId && result.courseId) {
+      if (result.success && result.quizId && result.courseId && result.sessionId) {
         const playerInfo: QuizWithPlayerInfo = { 
           nickname: nickname.trim(), 
-          joinedPin: pin.trim().toUpperCase() 
-          // sessionId from backend could also be stored if needed for subsequent authenticated actions within the game
+          joinedPin: pin.trim().toUpperCase(),
+          sessionId: result.sessionId, // Store sessionId
         };
         localStorage.setItem(QUIZ_WITH_PLAYER_INFO_KEY, JSON.stringify(playerInfo));
-        // Navigate to the quiz. The backend has now associated this player with the session.
-        // The quiz page itself might load based on this player's session state from backend if needed.
-        navigate(ROUTES.QUIZ.replace(':courseId', result.courseId).replace(':quizId', result.quizId));
+        
+        // Pass sessionId and nickname to QuizPage for student's real-time broadcasting
+        navigate(
+          ROUTES.QUIZ.replace(':courseId', result.courseId).replace(':quizId', result.quizId),
+          { 
+            state: { 
+              quizWithSessionId: result.sessionId, 
+              playerNickname: nickname.trim() 
+            } 
+          }
+        );
       } else {
         setError(result.message || 'Could not join the game. Please check PIN and try again.');
       }
@@ -48,23 +57,23 @@ const JoinQuizWithPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center bg-gradient-to-br from-green-400 via-teal-500 to-blue-500 dark:from-green-700 dark:via-teal-800 dark:to-blue-900 p-4 transition-all duration-300 ease-in-out">
-      <div className="bg-white dark:bg-gray-800 p-8 md:p-10 rounded-xl shadow-2xl w-full max-w-md text-center transition-colors duration-300 ease-in-out">
-        <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-white mb-8">Join QuizWith!</h1>
+    <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center bg-gradient-to-br from-green-400 via-teal-500 to-blue-500 p-4 transition-all duration-300 ease-in-out">
+      <div className="bg-white p-8 md:p-10 rounded-xl shadow-2xl w-full max-w-md text-center transition-colors duration-300 ease-in-out">
+        <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-8">Join QuizWith!</h1>
         <form onSubmit={handleSubmit} className="space-y-6">
           <Input
             label="Game PIN" id="pin" name="pin" type="text" value={pin}
             onChange={(e) => setPin(e.target.value.toUpperCase())} 
             placeholder="Enter 6-digit PIN" required maxLength={6}
-            className="text-center text-2xl tracking-widest dark:bg-gray-700"
+            className="text-center text-2xl tracking-widest"
           />
           <Input
             label="Nickname" id="nickname" name="nickname" type="text" value={nickname}
             onChange={(e) => setNickname(e.target.value)}
             placeholder="Enter your nickname" required maxLength={20}
-            className="text-center dark:bg-gray-700"
+            className="text-center"
           />
-          {error && <p className="text-red-500 dark:text-red-400 text-sm">{error}</p>}
+          {error && <p className="text-red-500 text-sm">{error}</p>}
           <div>
             <Button type="submit" variant="primary" className="w-full text-lg py-3" disabled={isLoading}>
               {isLoading ? <LoadingSpinner /> : 'Join Game'}

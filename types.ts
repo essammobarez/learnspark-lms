@@ -51,7 +51,7 @@ export interface Course {
   lessons: Lesson[];
   quizIds: string[];
   category: string;
-  rating: number;
+  rating: number; // This will be the average rating, updated by a backend trigger
   enrollmentCount: number;
 }
 
@@ -64,7 +64,6 @@ export interface GeneratedQuizQuestion {
 // Types for QuizWith session simulation
 export interface ActiveQuizWithSession {
   pin: string;
-  // Fix: Added missing sessionId property to align with its usage in mockApiService.ts.
   sessionId: string; 
   quizId: string;
   courseId: string;
@@ -76,6 +75,8 @@ export interface ActiveQuizWithSession {
 export interface QuizWithPlayerInfo {
   nickname: string;
   joinedPin: string;
+  // Added sessionId to be available on the student side for broadcasting answers
+  sessionId?: string; 
 }
 
 export interface QuizAttempt {
@@ -91,4 +92,32 @@ export interface QuizAttempt {
   percentage: number;
   takenAt: string; // ISO date string
   isQuizWith: boolean; // To distinguish between regular quiz and QuizWith
+}
+
+// Payload for broadcasting live answers in QuizWith
+export interface QuizWithLiveAnswerPayload {
+  type: 'ANSWER_SUBMITTED'; // Message type for differentiation if other messages are sent
+  quizId: string;
+  questionId: string;
+  selectedOptionId: string;
+  playerNickname: string;
+  // sessionId is implicit from the channel, but can be included for verification
+}
+
+// --- Course Rating and Review Types ---
+export interface CourseRating {
+  id: string;
+  courseId: string;
+  userId: string;
+  rating: number; // 1 to 5
+  reviewText?: string;
+  createdAt: string; // ISO date string
+  updatedAt: string; // ISO date string
+}
+
+export interface UserCourseRating extends CourseRating {
+  // username is not directly fetched from auth.users to avoid relationship errors.
+  // The UI will handle displaying "Anonymous User" or a similar placeholder.
+  // If a profiles table linked to auth.users is available, this could be populated.
+  username?: string; 
 }

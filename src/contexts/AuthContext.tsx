@@ -1,6 +1,6 @@
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { User, UserRole } from '../types';
+import { User, UserRole } from '../../types';
 import { apiService, supabase } from '../services/apiService'; // Import supabase client directly for onAuthStateChange
 import { AuthSession as SupabaseSession, AuthUser as SupabaseAuthUser } from '@supabase/supabase-js';
 import type { AuthChangeEvent } from '@supabase/gotrue-js';

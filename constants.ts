@@ -15,6 +15,7 @@ export const ROUTES = {
   CREATE_COURSE: '/instructor/create-course',
   EDIT_COURSE: '/instructor/courses/:courseId/edit', 
   CREATE_QUIZ: '/instructor/courses/:courseId/create-quiz',
+  EDIT_QUIZ: '/instructor/courses/:courseId/quizzes/:quizId/edit', // New route for editing quizzes
   CREATE_QUIZWITH_GAME: '/instructor/create-quizwith-game', 
   QUIZ: '/courses/:courseId/quiz/:quizId',
   LIVE_SESSION: '/courses/:courseId/live',
@@ -24,6 +25,5 @@ export const ROUTES = {
   INSTRUCTOR_REPORTS: '/instructor/reports', // New route for instructor quiz reports
 };
 
-// LocalStorage keys for QuizWith simulation (client-side player info)
-export const QUIZ_WITH_ACTIVE_PIN_KEY = 'quizWithActivePin'; // This will be primarily managed by backend now, but client might peek for UX.
+// LocalStorage key for QuizWith (client-side player info nickname passing)
 export const QUIZ_WITH_PLAYER_INFO_KEY = 'quizWithPlayerInfo';

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { apiService } from '../services/apiService'; // Use real API service
+import { apiService } from '../services/apiService'; 
 import { generateQuizQuestionsWithGemini, isGeminiAvailable } from '../services/geminiService';
 import { ROUTES } from '../constants';
 import Input from '../components/Input';
@@ -46,6 +46,7 @@ const CreateQuizWithGamePage: React.FC = () => {
     setPageLoading(true);
     setError('');
     try {
+      // FIX: Property 'getCreatedCourses' now exists on apiService
       const courses = await apiService.getCreatedCourses();
       setInstructorCourses(courses);
       if (courses.length > 0) {
@@ -107,13 +108,14 @@ const CreateQuizWithGamePage: React.FC = () => {
     e.preventDefault(); setError('');
     if (!selectedCourseId) { setError('Please select a course.'); return; }
     if (!quizTitle || questions.length === 0) { setError('Quiz title and at least one question are required.'); return; }
-    if (!user) { setError('User not found.'); return; } // Should be caught by useEffect
+    if (!user) { setError('User not found.'); return; } 
     setFormSubmitting(true);
     try {
       const quizData: Omit<Quiz, 'id'> = { title: quizTitle, questions, courseId: selectedCourseId };
+      // FIX: Property 'createQuiz' now exists on apiService
       const newQuiz = await apiService.createQuiz(quizData);
       
-      // Now host this newly created quiz
+      // FIX: Property 'hostQuizWithSession' now exists on apiService
       const sessionResponse = await apiService.hostQuizWithSession(newQuiz.id);
       
       setGeneratedPin(sessionResponse.pin);
@@ -127,9 +129,16 @@ const CreateQuizWithGamePage: React.FC = () => {
     }
   };
   const handleOpenLobbyAndStart = () => {
-    if (!generatedPin || !createdQuizDetails) return;
-    // Navigation for host; actual game start logic for players would be backend-driven
-    navigate(ROUTES.QUIZ.replace(':courseId', createdQuizDetails.courseId).replace(':quizId', createdQuizDetails.quizId));
+    if (!generatedPin || !createdQuizDetails || !createdQuizDetails.sessionId) return;
+    navigate(
+      ROUTES.QUIZ.replace(':courseId', createdQuizDetails.courseId).replace(':quizId', createdQuizDetails.quizId),
+      { 
+        state: { 
+          isHostingQuizWith: true, 
+          quizWithSessionId: createdQuizDetails.sessionId 
+        } 
+      }
+    );
   };
   const resetAndCreateAnother = () => {
     setQuizTitle(''); setQuestions([]); setCurrentQuestionText(''); setCurrentOptions([{ text: '' }, { text: '' }]);

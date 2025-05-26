@@ -4,7 +4,7 @@ import React from 'react';
 // Confirmed react-router-dom import syntax for v6+.
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'; // Updated for v6+
 import { AuthProvider } from './contexts/AuthContext';
-import { ThemeProvider } from './contexts/ThemeContext'; // Import ThemeProvider
+// import { ThemeProvider } from './contexts/ThemeContext'; // Removed ThemeProvider
 import { useAuth } from './hooks/useAuth';
 import Navbar from './components/Navbar';
 import LoginPage from './pages/LoginPage';
@@ -16,6 +16,7 @@ import CourseDetailPage from './pages/CourseDetailPage';
 import CreateCoursePage from './pages/CreateCoursePage';
 import EditCoursePage from './pages/EditCoursePage'; 
 import CreateQuizPage from './pages/CreateQuizPage';
+import EditQuizPage from './pages/EditQuizPage'; // New page for editing quizzes
 import CreateQuizWithGamePage from './pages/CreateQuizWithGamePage'; 
 import QuizPage from './pages/QuizPage';
 import LiveSessionPage from './pages/LiveSessionPage';
@@ -110,6 +111,9 @@ const AppRoutes: React.FC = () => {
       <Route path={ROUTES.CREATE_QUIZ} element={
           <ProtectedRoute allowedRoles={[UserRole.INSTRUCTOR]} element={<CreateQuizPage />} />
       }/>
+      <Route path={ROUTES.EDIT_QUIZ} element={
+          <ProtectedRoute allowedRoles={[UserRole.INSTRUCTOR]} element={<EditQuizPage />} />
+      }/>
        <Route path={ROUTES.CREATE_QUIZWITH_GAME} element={
           <ProtectedRoute allowedRoles={[UserRole.INSTRUCTOR]} element={<CreateQuizWithGamePage />} />
       }/>
@@ -137,16 +141,16 @@ const AppRoutes: React.FC = () => {
 const App: React.FC = () => {
   return (
     <AuthProvider>
-      <ThemeProvider> 
+      {/* <ThemeProvider> */} {/* Removed ThemeProvider */}
         <HashRouter>
-          <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors duration-300 ease-in-out">
+          <div className="flex flex-col min-h-screen bg-gray-100"> {/* Removed dark mode classes */}
             <Navbar />
             <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
               <AppRoutes />
             </main>
           </div>
         </HashRouter>
-      </ThemeProvider>
+      {/* </ThemeProvider> */} {/* Removed ThemeProvider */}
     </AuthProvider>
   );
 };

@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { apiService } from '../services/apiService'; // Use real API service
+import { apiService } from '../services/apiService'; 
 import { Quiz, UserRole } from '../types';
 import { ROUTES } from '../constants';
 import Button from '../components/Button';
@@ -16,7 +16,7 @@ const HostQuizSessionPage: React.FC = () => {
 
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [pin, setPin] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null); // Store backend session ID
+  const [sessionId, setSessionId] = useState<string | null>(null); 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,6 +33,7 @@ const HostQuizSessionPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
+      // FIX: Property 'getQuizById' now exists on apiService
       const fetchedQuiz = await apiService.getQuizById(quizId);
       if (!fetchedQuiz) {
         setError("Quiz not found.");
@@ -42,10 +43,10 @@ const HostQuizSessionPage: React.FC = () => {
         setError("This quiz has no questions. Please add questions before hosting.");
       } else {
         setQuiz(fetchedQuiz);
-        // Call backend to host the session and get PIN
+        // FIX: Property 'hostQuizWithSession' now exists on apiService
         const sessionResponse = await apiService.hostQuizWithSession(fetchedQuiz.id);
         setPin(sessionResponse.pin);
-        setSessionId(sessionResponse.sessionId); // Store backend session ID
+        setSessionId(sessionResponse.sessionId); 
       }
     } catch (e) {
       console.error("Error setting up quiz session:", e);
@@ -56,30 +57,33 @@ const HostQuizSessionPage: React.FC = () => {
 
   useEffect(() => {
     setupSession();
-    // No need for complex localStorage cleanup here, as backend manages session lifecycle.
-    // Client-side pin/sessionId are for UI display or joining the specific game instance.
   }, [setupSession]);
 
 
   const handleStartQuizLobby = () => {
     if (!pin || !quiz || !sessionId) return;
-    // In a real app, this might navigate to a lobby page that polls the backend session status
-    // or uses WebSockets. For this demo, we'll navigate directly to the quiz page for the host.
-    // The actual "start" of the quiz for players would be controlled by the backend.
-    navigate(ROUTES.QUIZ.replace(':courseId', quiz.courseId).replace(':quizId', quiz.id));
+    navigate(
+      ROUTES.QUIZ.replace(':courseId', quiz.courseId).replace(':quizId', quiz.id),
+      { 
+        state: { 
+          isHostingQuizWith: true, 
+          quizWithSessionId: sessionId 
+        } 
+      }
+    );
   };
 
   if (isLoading) {
-    return <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center"><LoadingSpinner /> <p className="mt-2 dark:text-gray-300">Setting up session...</p></div>;
+    return <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center"><LoadingSpinner /> <p className="mt-2 text-gray-600">Setting up session...</p></div>;
   }
 
   if (error) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center p-4 bg-gray-100 dark:bg-gray-900">
-        <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl text-center max-w-md">
-            <ExclamationTriangleIcon className="w-12 h-12 text-red-500 dark:text-red-400 mx-auto mb-4"/>
-            <h1 className="text-2xl font-bold text-red-600 dark:text-red-400 mb-4">Session Setup Error</h1>
-            <p className="text-gray-700 dark:text-gray-300 mb-6">{error}</p>
+      <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center p-4 bg-gray-100">
+        <div className="bg-white p-8 rounded-lg shadow-xl text-center max-w-md">
+            <ExclamationTriangleIcon className="w-12 h-12 text-red-500 mx-auto mb-4"/>
+            <h1 className="text-2xl font-bold text-red-600 mb-4">Session Setup Error</h1>
+            <p className="text-gray-700 mb-6">{error}</p>
             <Button onClick={() => navigate(ROUTES.COURSE_DETAIL.replace(':courseId', courseId || ''))} variant="secondary" className="flex items-center justify-center">
                 <ArrowUturnLeftIcon className="w-5 h-5 mr-2"/> Back to Course
             </Button>
@@ -89,28 +93,27 @@ const HostQuizSessionPage: React.FC = () => {
   }
 
   if (!quiz || !pin) {
-    return <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center text-gray-700 dark:text-gray-300">Waiting for session data... If this persists, there might be an issue.</div>;
+    return <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center text-gray-700">Waiting for session data... If this persists, there might be an issue.</div>;
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 dark:from-indigo-800 dark:via-purple-800 dark:to-pink-900 text-white p-4 transition-all duration-300 ease-in-out">
-      <div className="bg-white dark:bg-gray-800 text-gray-800 dark:text-white p-8 md:p-12 rounded-xl shadow-2xl text-center max-w-xl transition-colors duration-300 ease-in-out">
+    <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 text-white p-4 transition-all duration-300 ease-in-out">
+      <div className="bg-white text-gray-800 p-8 md:p-12 rounded-xl shadow-2xl text-center max-w-xl transition-colors duration-300 ease-in-out">
         <h1 className="text-3xl md:text-4xl font-bold mb-3">Hosting QuizWith!</h1>
-        <p className="text-xl text-gray-600 dark:text-gray-300 mb-6">Quiz: <span className="font-semibold">{quiz.title}</span></p>
+        <p className="text-xl text-gray-600 mb-6">Quiz: <span className="font-semibold">{quiz.title}</span></p>
         
         <div className="mb-8">
           <p className="text-lg mb-2">Share this Game PIN with participants:</p>
-          <div className="text-5xl sm:text-6xl font-bold text-purple-600 dark:text-purple-400 tracking-wider bg-gray-100 dark:bg-gray-700 p-4 rounded-lg inline-block shadow-inner">
+          <div className="text-5xl sm:text-6xl font-bold text-purple-600 tracking-wider bg-gray-100 p-4 rounded-lg inline-block shadow-inner">
             {pin}
           </div>
         </div>
         
-        <p className="text-md text-gray-600 dark:text-gray-400 mb-6">Participants can join using the "Join QuizWith" link or by going to the join page directly. Waiting for players...</p>
+        <p className="text-md text-gray-600 mb-6">Participants can join using the "Join QuizWith" link or by going to the join page directly. Waiting for players...</p>
         
         <Button onClick={handleStartQuizLobby} variant="success" size="lg" className="w-full text-xl">
           Open Quiz Lobby & Start Game
         </Button>
-        {/* In a real app, you'd have a player list and a more explicit "Start Game for Everyone" button */}
 
         <Button onClick={() => navigate(ROUTES.COURSE_DETAIL.replace(':courseId', courseId!))} variant="secondary" className="mt-6 w-full flex items-center justify-center">
           <ArrowUturnLeftIcon className="w-5 h-5 mr-2"/> Back to Course Details

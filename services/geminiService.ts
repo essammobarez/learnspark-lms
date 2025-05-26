@@ -1,46 +1,35 @@
 
+
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { GeneratedQuizQuestion, QuizQuestion, QuizQuestionOption } from '../types';
-
-// Attempt to get API_KEY from window.process.env if it exists (e.g., for local demo/dev)
-// This is NOT recommended for production. API keys should be on a backend.
-const API_KEY_PLACEHOLDER = "YOUR_GEMINI_API_KEY"; // Common placeholder
-let apiKeyFromEnv: string | undefined = undefined;
-
-if (typeof window !== 'undefined' && (window as any).process && (window as any).process.env && (window as any).process.env.API_KEY) {
-  apiKeyFromEnv = (window as any).process.env.API_KEY;
-}
 
 let ai: GoogleGenAI | null = null;
 let geminiInitializationError: string | null = null;
 
-if (apiKeyFromEnv && apiKeyFromEnv !== API_KEY_PLACEHOLDER && apiKeyFromEnv.trim() !== "" && apiKeyFromEnv.length > 10) { // Basic sanity check
-  try {
-    ai = new GoogleGenAI({ apiKey: apiKeyFromEnv });
-    console.info("Gemini AI Service: Initialized with client-side API key for demo/dev purposes.");
-    console.warn("Gemini AI Service: IMPORTANT - Using a client-side API key is insecure for production. Protect your API key by using a backend proxy.");
-  } catch (error) {
-    console.error("Gemini AI Service: Failed to initialize GoogleGenAI with client-side key:", error);
-    geminiInitializationError = error instanceof Error ? error.message : "Unknown initialization error.";
-    ai = null;
+try {
+  // FIX: Initialize GoogleGenAI directly with process.env.API_KEY as per guidelines.
+  // Assume process.env.API_KEY is pre-configured and valid.
+  if (!process.env.API_KEY) {
+    // This case should ideally not happen based on problem constraints,
+    // but good practice to have a fallback or clear error.
+    geminiInitializationError = "Gemini AI Service: API_KEY is not defined in process.env.";
+    console.error(geminiInitializationError);
+    // ai remains null
+  } else {
+    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    console.info("Gemini AI Service: Initialized with API key from process.env.");
   }
-} else {
-  let warningMessage = "Gemini AI Service: AI features will be disabled or limited. ";
-  if (!apiKeyFromEnv) {
-    warningMessage += "API key not found (window.process.env.API_KEY is undefined or was removed from index.html).";
-  } else if (apiKeyFromEnv === API_KEY_PLACEHOLDER || apiKeyFromEnv.trim() === "" || apiKeyFromEnv.length <=10) {
-    warningMessage += "API key is a placeholder, empty, or too short.";
-  }
-  warningMessage += " For full functionality in development, provide a valid key in index.html. For production, always use a backend proxy.";
-  console.warn(warningMessage);
-  geminiInitializationError = warningMessage; // Store the warning as an error if no init
-  ai = null;
+} catch (error) {
+  console.error("Gemini AI Service: Failed to initialize GoogleGenAI:", error);
+  geminiInitializationError = error instanceof Error ? error.message : "Unknown initialization error.";
+  ai = null; // Ensure ai is null on error
 }
 
 export const generateQuizQuestionsWithGemini = async (topic: string, numberOfQuestions: number = 3): Promise<QuizQuestion[]> => {
   if (!ai) {
     const defaultError = "Gemini API client is not initialized.";
-    throw new Error(geminiInitializationError || defaultError + " Ensure the API_KEY is correctly configured (ideally via a backend proxy for production).");
+    // FIX: Updated error message to be more concise given the new initialization logic.
+    throw new Error(geminiInitializationError || defaultError + " Ensure the API_KEY is correctly configured in the environment.");
   }
 
   const prompt = `
@@ -92,7 +81,8 @@ export const generateQuizQuestionsWithGemini = async (topic: string, numberOfQue
   } catch (error) {
     console.error("Error generating quiz questions with Gemini:", error);
     if (error instanceof Error && (error.message.includes("API key not valid") || error.message.includes("permission denied"))) {
-        throw new Error("Invalid or unauthorized Gemini API Key. Please check your configuration. For production, use a backend proxy.");
+        // FIX: Updated error message for API key issues
+        throw new Error("Invalid or unauthorized Gemini API Key. Please check the API_KEY in your environment configuration.");
     }
     throw new Error(`Failed to generate questions: ${error instanceof Error ? error.message : String(error)}`);
   }
