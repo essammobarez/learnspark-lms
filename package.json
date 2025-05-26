@@ -1,26 +1,11 @@
 {
-  "name": "learnspark-lms",
+  "name": "learnspark-frontend",
+  "version": "0.1.0",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "start": "node server.js"
   },
   "dependencies": {
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "@google/genai": "^1.0.1",
-    "react-router-dom": "^7.6.0",
-    "@heroicons/react": "^2.2.0",
-    "react-router": "^7.6.0",
-    "@supabase/supabase-js": "^2.45.0",
-    "@supabase/gotrue-js": "^2.70.0"
-  },
-  "devDependencies": {
-    "@types/node": "^22.14.0",
-    "typescript": "~5.7.2",
-    "vite": "^6.2.0"
+    "express": "^4.19.2"
   }
 }
