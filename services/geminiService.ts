@@ -1,35 +1,37 @@
 
-
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { GeneratedQuizQuestion, QuizQuestion, QuizQuestionOption } from '../types';
 
 let ai: GoogleGenAI | null = null;
 let geminiInitializationError: string | null = null;
 
+// Vite uses import.meta.env for environment variables
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+
 try {
-  // FIX: Initialize GoogleGenAI directly with process.env.API_KEY as per guidelines.
-  // Assume process.env.API_KEY is pre-configured and valid.
-  if (!process.env.API_KEY) {
-    // This case should ideally not happen based on problem constraints,
-    // but good practice to have a fallback or clear error.
-    geminiInitializationError = "Gemini AI Service: API_KEY is not defined in process.env.";
+  if (!GEMINI_API_KEY) {
+    geminiInitializationError = "Gemini AI Service: VITE_GEMINI_API_KEY is not defined. Please create a .env file in the project root and add it, or set it as an environment variable for deployment.";
     console.error(geminiInitializationError);
-    // ai remains null
-  } else {
-    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    console.info("Gemini AI Service: Initialized with API key from process.env.");
+    ai = null;
+  } else if (GEMINI_API_KEY.includes("YOUR_ACTUAL_GEMINI_API_KEY") || GEMINI_API_KEY.length < 10) { // Basic check for placeholder
+    geminiInitializationError = "Gemini AI Service: VITE_GEMINI_API_KEY appears to be a placeholder. Please update it with your actual Gemini API key.";
+    console.error(geminiInitializationError);
+    ai = null;
+  }
+  else {
+    ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    console.info("Gemini AI Service: Initialized successfully.");
   }
 } catch (error) {
   console.error("Gemini AI Service: Failed to initialize GoogleGenAI:", error);
   geminiInitializationError = error instanceof Error ? error.message : "Unknown initialization error.";
-  ai = null; // Ensure ai is null on error
+  ai = null;
 }
 
 export const generateQuizQuestionsWithGemini = async (topic: string, numberOfQuestions: number = 3): Promise<QuizQuestion[]> => {
   if (!ai) {
     const defaultError = "Gemini API client is not initialized.";
-    // FIX: Updated error message to be more concise given the new initialization logic.
-    throw new Error(geminiInitializationError || defaultError + " Ensure the API_KEY is correctly configured in the environment.");
+    throw new Error(geminiInitializationError || defaultError + " Ensure VITE_GEMINI_API_KEY is correctly configured.");
   }
 
   const prompt = `
@@ -81,13 +83,12 @@ export const generateQuizQuestionsWithGemini = async (topic: string, numberOfQue
   } catch (error) {
     console.error("Error generating quiz questions with Gemini:", error);
     if (error instanceof Error && (error.message.includes("API key not valid") || error.message.includes("permission denied"))) {
-        // FIX: Updated error message for API key issues
-        throw new Error("Invalid or unauthorized Gemini API Key. Please check the API_KEY in your environment configuration.");
+        throw new Error("Invalid or unauthorized Gemini API Key. Please check VITE_GEMINI_API_KEY in your .env file or environment configuration.");
     }
     throw new Error(`Failed to generate questions: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
 export const isGeminiAvailable = (): boolean => {
-  return ai !== null;
+  return ai !== null && !geminiInitializationError; // Also check if there was an error during init
 };

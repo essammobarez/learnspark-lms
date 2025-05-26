@@ -1,18 +1,18 @@
 
-
 import { createClient, SupabaseClient, AuthUser as SupabaseAuthUser, AuthSession as SupabaseSession, PostgrestError, AuthError } from '@supabase/supabase-js';
-// FIX: Added missing QuizQuestion and QuizQuestionOption types to the import.
-import { User, Course, Quiz, Lesson, QuizAttempt, UserRole, ActiveQuizWithSession, QuizQuestion, QuizQuestionOption } from '../../types';
+import { User, Course, Quiz, Lesson, QuizAttempt, UserRole, ActiveQuizWithSession, QuizQuestion, QuizQuestionOption } from '../../types'; // Adjusted path
 
-const SUPABASE_URL = (window as any).process?.env?.SUPABASE_URL;
-const SUPABASE_ANON_KEY = (window as any).process?.env?.SUPABASE_ANON_KEY;
+// Vite uses import.meta.env for environment variables
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 let supabaseInstance: SupabaseClient;
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL === "YOUR_SUPABASE_URL" || SUPABASE_ANON_KEY === "YOUR_SUPABASE_ANON_KEY") {
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.includes("YOUR_SUPABASE_URL") || SUPABASE_ANON_KEY.includes("YOUR_SUPABASE_ANON_KEY")) {
   const errorMessage =
-    "FATAL ERROR: Supabase URL or Anon Key is not configured or is using placeholder values. " +
-    "Please update them in index.html with your actual Supabase project credentials. " +
+    "FATAL ERROR (src/services/apiService.ts): Supabase URL or Anon Key is not configured. " +
+    "Please create a .env file in the project root and add your VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY. " +
+    "For deployment, set these as environment variables. " +
     "The application cannot function without valid Supabase credentials.";
 
   console.error(errorMessage);
@@ -22,9 +22,9 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL === "YOUR_SUPABASE_URL" 
     if (rootEl) {
         rootEl.innerHTML = `
             <div style="padding: 20px; font-family: sans-serif; background-color: #ffebee; border: 2px solid #c62828; color: #c62828; margin: 20px; border-radius: 8px;">
-                <h1 style="color: #c62828; font-size: 24px; margin-bottom: 15px;">Application Configuration Error</h1>
+                <h1 style="color: #c62828; font-size: 24px; margin-bottom: 15px;">Application Configuration Error (from src/services)</h1>
                 <p style="font-size: 16px; line-height: 1.6;"><strong>${errorMessage.split('.')[0]}.</strong></p>
-                <p style="font-size: 16px; line-height: 1.6;">Please open the <code>index.html</code> file and replace <code>YOUR_SUPABASE_URL</code> and <code>YOUR_SUPABASE_ANON_KEY</code> with your actual Supabase project credentials (found in your Supabase project's API settings).</p>
+                <p style="font-size: 16px; line-height: 1.6;">Please refer to the console error message for instructions on setting up your <code>.env</code> file or deployment environment variables.</p>
                 <p style="font-size: 16px; line-height: 1.6;">The application cannot function until this is corrected.</p>
             </div>
         `;
@@ -39,7 +39,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL === "YOUR_SUPABASE_URL" 
     displayErrorOnPage();
   }
 
-  throw new Error("Supabase credentials are placeholders. See console and page for details. App cannot start.");
+  throw new Error("Supabase credentials are not configured correctly (src/services/apiService.ts). See console and page for details. App cannot start.");
 
 } else {
   supabaseInstance = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
@@ -54,11 +54,9 @@ function toCamelCase(str: string): string {
 }
 
 function toSnakeCase(str: string): string {
-  // Correctly converts camelCase to snake_case (e.g., isCorrect -> is_correct, quizId -> quiz_id)
-  // Handles cases like 'text' -> 'text' and 'isCorrect' -> 'is_correct'
   return str.replace(/([A-Z])/g, (match, letter, offset) => {
     return (offset > 0 ? '_' : '') + letter.toLowerCase();
-  }).replace(/^_/, ''); // Remove leading underscore if first letter was uppercase (e.g. for ID -> id, which is fine)
+  }).replace(/^_/, ''); 
 }
 
 
@@ -66,7 +64,7 @@ function mapKeys(obj: any, mappingFn: (key: string) => string): any {
   if (typeof obj !== 'object' || obj === null) return obj;
   if (Array.isArray(obj)) return obj.map(item => mapKeys(item, mappingFn));
   return Object.keys(obj).reduce((acc, key) => {
-    acc[mappingFn(key)] = mapKeys(obj[key], mappingFn); // Recursively map keys of nested objects
+    acc[mappingFn(key)] = mapKeys(obj[key], mappingFn); 
     return acc;
   }, {} as any);
 }
@@ -77,13 +75,11 @@ const mapToSupabaseType = (data: any): any => mapKeys(data, toSnakeCase);
 // --- Error Handling Helper ---
 function handleSupabaseError({ error, customMessage }: { error: PostgrestError | AuthError | null, customMessage?: string }): void {
   if (error) {
-    // For .single() queries, PGRST116 means "Searched for a single row, but found no results" which is often not an error.
-    // Allow it to pass if no custom message, as the calling function will handle the null data.
     if (error.code === 'PGRST116' && !customMessage) {
         return; 
     }
-    console.error(customMessage || 'Supabase Error:', error.message, error);
-    throw new Error(customMessage || `Database error: ${error.message}`);
+    console.error(customMessage || 'Supabase Error (from src/services):', error.message, error);
+    throw new Error(customMessage || `Database error (src/services): ${error.message}`);
   }
 }
 
@@ -254,21 +250,18 @@ export const apiService = {
     const mappedData = mapToAppType(data);
     if (!mappedData) return null;
 
-    // Rename 'quizQuestions' to 'questions' to match the Quiz type
     if (mappedData.hasOwnProperty('quizQuestions')) {
         mappedData.questions = mappedData.quizQuestions;
         delete mappedData.quizQuestions;
     }
 
-    // Ensure questions is an array and rename 'quizOptions' to 'options' within each question
     mappedData.questions = Array.isArray(mappedData.questions) ? mappedData.questions : [];
     mappedData.questions.forEach((question: any) => { 
         if (question && question.hasOwnProperty('quizOptions')) {
             question.options = question.quizOptions;
             delete question.quizOptions;
         }
-        // Ensure options is an array
-        if(question) { // Check if question itself is not null
+        if(question) { 
             question.options = Array.isArray(question.options) ? question.options : [];
         }
     });
@@ -453,9 +446,6 @@ export const apiService = {
   },
 
   // --- Quiz Attempts & Reports ---
-  // FIX: Changed type of attemptData to Omit<QuizAttempt, 'id' | 'takenAt' | 'percentage'>
-  // This ensures that attemptData is expected to have quizTitle (string) and courseTitle (string | undefined)
-  // which aligns with the destructuring on line 460 and the guiding comment.
   submitQuizScore: async (attemptData: Omit<QuizAttempt, 'id' | 'takenAt' | 'percentage'>): Promise<QuizAttempt> => {
     const currentUser = await apiService.getCurrentUser(); 
     const userIdToStore = attemptData.isQuizWith ? (currentUser?.id || null) : (currentUser?.id);
@@ -463,11 +453,10 @@ export const apiService = {
     if (!userIdToStore && !attemptData.isQuizWith) throw new Error("User must be logged in for non-QuizWith attempts.");
     if (!userIdToStore && attemptData.isQuizWith && !attemptData.playerNickname) throw new Error("Nickname required for guest QuizWith attempts.");
 
-    // Explicitly destructure to remove problematic fields (quizTitle, courseTitle) before mapping and insertion
     const { quizTitle, courseTitle, ...restOfAttemptDataForSupabase } = attemptData;
 
     const supabaseAttemptData = mapToSupabaseType({
-      ...restOfAttemptDataForSupabase, // Use the object without quizTitle and courseTitle
+      ...restOfAttemptDataForSupabase, 
       userId: userIdToStore, 
       percentage: (attemptData.totalQuestions > 0 ? (attemptData.score / attemptData.totalQuestions) * 100 : 0),
       takenAt: new Date().toISOString(), 
@@ -479,13 +468,12 @@ export const apiService = {
     handleSupabaseError({ error, customMessage: "Failed to submit quiz score." });
     if (!data) throw new Error("Failed to submit quiz score, no data returned.");
 
-    // Fetch titles separately to populate the returned object
     const {data: courseD} = await supabase.from('courses').select('title').eq('id', attemptData.courseId).single();
     const {data: quizD} = await supabase.from('quizzes').select('title').eq('id', attemptData.quizId).single();
 
     const appAttempt = mapToAppType(data) as QuizAttempt;
     appAttempt.courseTitle = courseD?.title || 'Unknown Course';
-    appAttempt.quizTitle = quizD?.title || 'Unknown Quiz'; // This is for the returned object, not DB insert
+    appAttempt.quizTitle = quizD?.title || 'Unknown Quiz'; 
     return appAttempt;
   },
 
@@ -584,8 +572,3 @@ export const apiService = {
     return appSession;
   },
 };
-
-// --- END OF FILE src/services/apiService.ts ---
-// Note: Removed the extensive comment block from the end of the file.
-// If the file ended with SQL schema comments, those were removed.
-// The file now ends with the closing curly brace of the apiService object.

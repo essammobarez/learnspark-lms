@@ -1,17 +1,18 @@
 
-
 import { createClient, SupabaseClient, AuthUser as SupabaseAuthUser, AuthSession as SupabaseSession, PostgrestError, AuthError, RealtimeChannel } from '@supabase/supabase-js';
 import { User, Course, Quiz, Lesson, QuizAttempt, UserRole, ActiveQuizWithSession, QuizQuestion, QuizQuestionOption, QuizWithLiveAnswerPayload, CourseRating, UserCourseRating } from '../types';
 
-const SUPABASE_URL = (window as any).process?.env?.SUPABASE_URL;
-const SUPABASE_ANON_KEY = (window as any).process?.env?.SUPABASE_ANON_KEY;
+// Vite uses import.meta.env for environment variables
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 let supabaseInstance: SupabaseClient;
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL === "YOUR_SUPABASE_URL" || SUPABASE_ANON_KEY === "YOUR_SUPABASE_ANON_KEY") {
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.includes("YOUR_SUPABASE_URL") || SUPABASE_ANON_KEY.includes("YOUR_SUPABASE_ANON_KEY")) {
   const errorMessage =
-    "FATAL ERROR: Supabase URL or Anon Key is not configured or is using placeholder values. " +
-    "Please update them in index.html with your actual Supabase project credentials. " +
+    "FATAL ERROR: Supabase URL or Anon Key is not configured. " +
+    "Please create a .env file in the project root and add your VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY. " +
+    "For deployment, set these as environment variables. " +
     "The application cannot function without valid Supabase credentials.";
 
   console.error(errorMessage);
@@ -23,7 +24,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL === "YOUR_SUPABASE_URL" 
             <div style="padding: 20px; font-family: sans-serif; background-color: #ffebee; border: 2px solid #c62828; color: #c62828; margin: 20px; border-radius: 8px;">
                 <h1 style="color: #c62828; font-size: 24px; margin-bottom: 15px;">Application Configuration Error</h1>
                 <p style="font-size: 16px; line-height: 1.6;"><strong>${errorMessage.split('.')[0]}.</strong></p>
-                <p style="font-size: 16px; line-height: 1.6;">Please open the <code>index.html</code> file and replace <code>YOUR_SUPABASE_URL</code> and <code>YOUR_SUPABASE_ANON_KEY</code> with your actual Supabase project credentials (found in your Supabase project's API settings).</p>
+                <p style="font-size: 16px; line-height: 1.6;">Please refer to the console error message for instructions on setting up your <code>.env</code> file or deployment environment variables.</p>
                 <p style="font-size: 16px; line-height: 1.6;">The application cannot function until this is corrected.</p>
             </div>
         `;
@@ -38,7 +39,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL === "YOUR_SUPABASE_URL" 
     displayErrorOnPage();
   }
 
-  throw new Error("Supabase credentials are placeholders. See console and page for details. App cannot start.");
+  throw new Error("Supabase credentials are not configured correctly. See console and page for details. App cannot start.");
 
 } else {
   supabaseInstance = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
@@ -476,7 +477,7 @@ export const apiService = {
   getCourseRatingsWithUserDetails: async (courseId: string): Promise<UserCourseRating[]> => {
     const { data, error } = await supabase
         .from('course_ratings')
-        .select('id, course_id, user_id, rating, review_text, created_at, updated_at') // Removed users(username)
+        .select('id, course_id, user_id, rating, review_text, created_at, updated_at') 
         .eq('course_id', courseId)
         .order('created_at', { ascending: false });
     handleSupabaseError({ error, customMessage: "Failed to fetch course ratings."});
@@ -484,10 +485,6 @@ export const apiService = {
     
     return data.map(r => {
         const mappedRating = mapToAppType(r) as UserCourseRating;
-        // Username is not fetched directly from auth.users to prevent relationship errors.
-        // The UI should handle displaying a placeholder if username is not available,
-        // or fetch usernames separately if a public 'profiles' table linked to 'auth.users' exists.
-        // For this fix, username will be undefined.
         return mappedRating;
     });
   },
@@ -518,10 +515,7 @@ export const apiService = {
         .single();
     handleSupabaseError({ error, customMessage: "Failed to submit course rating." });
     if (!data) throw new Error("Failed to submit rating, no data returned.");
-    
-    // The DB trigger 'course_ratings_after_change' handles updating courses.rating
-    // No need for: await supabase.rpc('update_course_average_rating', { course_id_param: courseId });
-    
+        
     return mapToAppType(data) as CourseRating;
   },
   getRatingsCountForCourse: async (courseId: string): Promise<number> => {
